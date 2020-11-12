@@ -7,13 +7,13 @@ The dataset is consists of time/marker pair sequences for a number of users.
 
 ## Mathematics
 
-The likelihood function they are trying to maximize is $L(\theta) = \prod_{i}\prod_{j}f(t_{j+1}, y_{j+1}|\mathcal{H}_{j}) = \prod_{j}f^*(t_{j+1}, y_{j+1})$, where $f^*(t, y) = f(t, y|\mathcal{H}_{j}) = f(t, y|\mathbf{h}_{j})$ is the conditional density function that the next event with marker $y$ will happen at time $t$ given the compact representation $\mathbf{h}_{j}$ of history $\mathcal{H}_{j}$ up to time step $j$. The compact representation is obtained by processing the sequence with an RNN. They model this joint distribution as $f^*(t, y) = f^*(t)P(y_{j+1}=y|\mathbf{h}_{j})$.
+The likelihood function they are trying to maximize is $$L(\theta) = \prod_{i}\prod_{j}f(t_{j+1}, y_{j+1}|\mathcal{H}_{j}) = \prod_{j}f^*(t_{j+1}, y_{j+1})$$, where $$f^*(t, y) = f(t, y|\mathcal{H}_{j}) = f(t, y|\mathbf{h}_{j})$$ is the conditional density function that the next event with marker $$y$$ will happen at time $$t$$ given the compact representation $$\mathbf{h}_{j}$$ of history $$\mathcal{H}_{j}$$ up to time step $$j$$. The compact representation is obtained by processing the sequence with an RNN. They model this joint distribution as $$f^*(t, y) = f^*(t)P(y_{j+1}=y|\mathbf{h}_{j})$$.
 
-To represent $f^*(t)$ using RNN's output, authors introduce $\lambda^*(t)$ function, which models the instantaneous rate of occurrence given that the event of interest did not occur until time $t$ conditioned on history. The relation between $f^*(t)$ and $\lambda^*(t)$ is the following: $\lambda^*(t) = \frac{f^*(t)}{S^*(t)}$, where $S^*(t)$ denotes the probability of the event of interest not having occurred by time $t$ conditioned on history. From the relation $\lambda^*(t) = -\frac{d\log S^*(t)}{dt}$, one can obtain $S^*(t) = \exp\big(-\int_{t_{j}}^{t}\lambda^*(t)\big)$, hence, $f^*(t) = \lambda^*(t)S^*(t) = \lambda^*(t)\exp\big(-\int_{t_{j}}^{t}\lambda^*(t)\big)$.
+To represent $$f^*(t)$$ using RNN's output, authors introduce $$\lambda^*(t)$$ function, which models the instantaneous rate of occurrence given that the event of interest did not occur until time $t$ conditioned on history. The relation between $$f^*(t)$$ and $$\lambda^*(t)$$ is the following: $$\lambda^*(t) = \frac{f^*(t)}{S^*(t)}$$, where $$S^*(t)$$ denotes the probability of the event of interest not having occurred by time $$t$$ conditioned on history. From the relation $$\lambda^*(t) = -\frac{d\log S^*(t)}{dt}$$, one can obtain $$S^*(t) = \exp\big(-\int_{t_{j}}^{t}\lambda^*(t)\big)$$, hence, $$f^*(t) = \lambda^*(t)S^*(t) = \lambda^*(t)\exp\big(-\int_{t_{j}}^{t}\lambda^*(t)\big)$$.
 
-Finally, authors connect output of RNN to this notation as $\lambda^*(t) = \exp\big( \mathbf{v}^{(t)\top}\mathbf{h_{j}} + w(t-t_{j}) + b^{(t)}\big)$, where $h_{j}$ is RNN's hidden state after processing $H_{j}$, and $\mathbf{v}^{(t)}$, $w$ and $b^{(t)}$ are learnable parameters. 
+Finally, authors connect output of RNN to this notation as $$\lambda^*(t) = \exp\big( \mathbf{v}^{(t)\top}\mathbf{h_{j}} + w(t-t_{j}) + b^{(t)}\big)$$, where $$h_{j}$$ is RNN's hidden state after processing $$\mathcal{H}_{j}$$, and $$\mathbf{v}^{(t)}$$, $$w$$ and $$b^{(t)}$$ are learnable parameters. 
 
-During inference, they compute timing for the next event as $\widehat{t}_{j+1} = \int_{t_{j}}^{\infty}tf^*(t)dt$.
+During inference, they compute timing for the next event as $$\widehat{t}_{j+1} = \int_{t_{j}}^{\infty}tf^*(t)dt$$.
 
 ## Idea 
 
