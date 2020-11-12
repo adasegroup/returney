@@ -1,5 +1,7 @@
 # # Semi-Supervised Recurrent Neural Network for Adverse Drug Reaction mention extraction
 
+**link to the article**: https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-018-2192-4
+
 Authors  propose a method to extract adverse drug reactions from social media platform's posts. They especially focused on Twitter posts. 
 Their approach is based on a semi-supervised learning method which operates in unsupervised and supervised phases. 
 In first phase, they train a Bidirectional-LSTM model to predict the drug name given its context in the tweet:
