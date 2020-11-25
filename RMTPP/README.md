@@ -1,40 +1,42 @@
 # Du et al. Recurrent Marked Temporal Point Processes: Embedding Event History to Vector, Du et al.
 
-## Problem
-In the original paper the problem is the following: given a sequence of time/marker pairs, the goal is to predict the time/marer pair of the next event. Markers could be, for instance, actions a user took during the visit to the site.
+### Problem statement
+The problem stated in the paper is as follows: given a sequence of events, each of which is characterized by a set of markers and the time at which it happened, the goal is to predict the time of the next event. Markers could be, for instance, actions a user took during the visit to the site.
+The dataset consists of time/marker pair sequences for a number of users.
 
-The dataset is consists of time/marker pair sequences for a number of users.
+### Mathematics
+The likelihood function they are trying to maximize is
+![](https://render.githubusercontent.com/render/math?math=L(\theta)=\prod_{i}\prod_{j}f(t_{j%2B1},y_{j%2B1}\vert\mathcal{H}_{j})=\prod_{j}f(t_{j%2B1},y_{j%2B1}),f^*(t,y)=f(t,y\vert\mathcal{H}_{j})=f(t,y\vert\mathbf{h}_{j}),)
+where the f with a star is the conditional density function that the next event with marker y will happen at time t given the compact representation h of history H up to time step j. The compact representation is obtained by processing the sequence with an RNN. They model this joint distribution as ![](https://render.githubusercontent.com/render/math?math=f^*(t,y)=f^*(t)P(y_{j%2B1}=y\vert\mathbf{h}_{j}).) One can notice that markers are also included in the likelihood: indeed, they train their RNN on the task of prediction of markers of future events, which serves an auxiliary task to the main one.
 
-## Mathematics
+To represent f with a star using RNN's output, authors introduce the following function: ![](https://render.githubusercontent.com/render/math?math=\lambda^*(t)=\frac{f^*(t)}{S^*(t)},) where S with a star denotes the probability of the event of interest not having occurred by time t conditioned on history. The lambda with a star models the instantaneous rate of occurrence given that the event of interest did not occur until time t, also conditioned on history. From the relation ![](https://render.githubusercontent.com/render/math?math=\lambda^*(t)=-\frac{d\logS^*(t)}{dt},) one can obtain ![](https://render.githubusercontent.com/render/math?math=S^*(t)=\exp[-\int_{t_{j}}^{t}\lambda^*(t)dt],)
+hence, ![](https://render.githubusercontent.com/render/math?math=f^*(t)=\lambda^*(t)S^*(t)=\lambda^*(t)\exp[-\int_{t_{j}}^{t}\lambda^*(t)].)
 
-The likelihood function they are trying to maximize is $$L(\theta) = \prod_{i}\prod_{j}f(t_{j+1}, y_{j+1}|\mathcal{H}_{j}) = \prod_{j}f^*(t_{j+1}, y_{j+1})$$, where $$f^*(t, y) = f(t, y|\mathcal{H}_{j}) = f(t, y|\mathbf{h}_{j})$$ is the conditional density function that the next event with marker $$y$$ will happen at time $$t$$ given the compact representation $$\mathbf{h}_{j}$$ of history $$\mathcal{H}_{j}$$ up to time step $$j$$. The compact representation is obtained by processing the sequence with an RNN. They model this joint distribution as $$f^*(t, y) = f^*(t)P(y_{j+1}=y|\mathbf{h}_{j})$$.
+Finally, authors connect output of RNN to this notation as ![](https://render.githubusercontent.com/render/math?math=\lambda^*(t)=\exp[\mathbf{v}^{(t)\top}\mathbf{h_{j}}%2Bw(t-t_{j})%2Bb^{(t)}]), where h is RNN's hidden state after processing history H, and v, w, and b are learnable parameters. 
 
-To represent $$f^*(t)$$ using RNN's output, authors introduce $$\lambda^*(t)$$ function, which models the instantaneous rate of occurrence given that the event of interest did not occur until time $t$ conditioned on history. The relation between $$f^*(t)$$ and $$\lambda^*(t)$$ is the following: $$\lambda^*(t) = \frac{f^*(t)}{S^*(t)}$$, where $$S^*(t)$$ denotes the probability of the event of interest not having occurred by time $$t$$ conditioned on history. From the relation $$\lambda^*(t) = -\frac{d\log S^*(t)}{dt}$$, one can obtain $$S^*(t) = \exp\big(-\int_{t_{j}}^{t}\lambda^*(t)\big)$$, hence, $$f^*(t) = \lambda^*(t)S^*(t) = \lambda^*(t)\exp\big(-\int_{t_{j}}^{t}\lambda^*(t)\big)$$.
+During inference, they compute timing for the next event as ![](https://render.githubusercontent.com/render/math?math=\widehat{t}_{j%2B1}=\int_{t_{j}}^{\infty}tf^*(t)dt,) which could be approximated using numerical integration techniques.
 
-Finally, authors connect output of RNN to this notation as $$\lambda^*(t) = \exp\big( \mathbf{v}^{(t)\top}\mathbf{h_{j}} + w(t-t_{j}) + b^{(t)}\big)$$, where $$h_{j}$$ is RNN's hidden state after processing $$\mathcal{H}_{j}$$, and $$\mathbf{v}^{(t)}$$, $$w$$ and $$b^{(t)}$$ are learnable parameters. 
+### Idea 
 
-During inference, they compute timing for the next event as $$\widehat{t}_{j+1} = \int_{t_{j}}^{\infty}tf^*(t)dt$$.
+As we have said, the main idea of the approach is to train an RNN that can assign a meaningful representation to a sequence (i.e. a vector), which can then be used to predict the timing of the next event.
 
-## Idea 
+The architecture of their RNN looks as follows:
 
-Main idea is to train a recurrent neural network to represent the given sequence as a vector and to predict both times and classes of actions using this vector embedding.
+![](https://sun9-37.userapi.com/impf/i_He6l3FVAHwYAV_1A-BUHLmd6iXXC5H9Ztwuw/2osvj6iTEHI.jpg?size=611x377&quality=96&proxy=1&sign=d4c3a0900322f0928c2db1ee31ba90a6)
 
-The architecture is the following:
-
-![](https://s3.us-west-2.amazonaws.com/secure.notion-static.com/fa58c1b3-ad8f-40cd-8723-38c17306f28c/Untitled.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAT73L2G45O3KS52Y5%2F20201112%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20201112T114351Z&X-Amz-Expires=86400&X-Amz-Signature=81936c671466d571e6416ad8c2c660856e949e9e902288779b2e7ea5b77bfc50&X-Amz-SignedHeaders=host&response-content-disposition=filename%20%3D%22Untitled.png%22)
-
-1) Input is a sequence of pairs of time features (like time of event, time difference between current and previous event) and action features (e.g. one-hot encoding of action class)
-2) Action features are passed through the learnable embedding layer, which allows to represent every action class in more meaningful way
-3) Time and embedded action features are connected into one vector and passed into RNN
-4) For every event in a series we extract the RNN embedding and predict time and action of the next event. This allows to learn on every event in the series (like in the language modeling problem)<br>
-4.1. Action class is predicted using softmax classifier:<br>
-![](https://s3.us-west-2.amazonaws.com/secure.notion-static.com/be76559e-9dd9-475e-970f-fce4a30fe8bf/Untitled.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAT73L2G45O3KS52Y5%2F20201112%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20201112T115340Z&X-Amz-Expires=86400&X-Amz-Signature=ce2582e9b2c34cfda975868659a6370b131ac1190f54ba30ed2527a3a42a5ae0&X-Amz-SignedHeaders=host&response-content-disposition=filename%20%3D%22Untitled.png%22)<br>
+1. Input is a sequence of pairs of time features (e.g. time of the event, time difference between the current and the previous event) and marker features (e.g. one-hot encoding of a class of an action taken at that time)  
+2. Categorical marker features are passed through the learnable embedding layer
+3. Time and embedded marker features are connected into one vector and passed as input to the RNN
+4. At every time step, after processing new data, the RNN updates its current hidden representation. This hidden representation is then passed to two fully connected layers: the first one is used to compute logits for the prediction of the class of the marker that is associated to the next event, and the second one is used to predict the timing of the next event. With this kind of modeling, the RNN can learn on every event in the series (like in the language modeling problem)
+4.1. Marker class is predicted using softmax classifier:
+![](https://sun9-4.userapi.com/impf/WmpweOvUtyKD1ArYEFfZXaVX9ppcCQ7kAtQFAw/lboxCUeuzks.jpg?size=451x106&quality=96&proxy=1&sign=2a506f05c2cf33aa07e3919d7fd52d8c)
 4.2. Time is predicted using conditional density function:
-![](https://s3.us-west-2.amazonaws.com/secure.notion-static.com/9e968164-2b99-4f49-920b-f507163a81bd/Untitled.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAT73L2G45O3KS52Y5%2F20201112%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20201112T122341Z&X-Amz-Expires=86400&X-Amz-Signature=7baf7214a9f371c61d749dab265dbf3b50b9a5b7d660da828f12fa790d8586a0&X-Amz-SignedHeaders=host&response-content-disposition=filename%20%3D%22Untitled.png%22)
+![](https://sun9-53.userapi.com/impf/FPp5GrR5LXop5YQNw-D_PNTrRNCFxxskGzLA_Q/vhp6w1fGVEw.jpg?size=625x230&quality=96&proxy=1&sign=65349cb9a4333b0ead18d3f1195d2c95)
 
-Then, the network can be trained using BPTT, maximizing the following log-likelihood function:
+The RNN is trained using BPTT, maximizing the following log-likelihood function:
 
-![](https://s3.us-west-2.amazonaws.com/secure.notion-static.com/f96e1c0a-564f-46bd-abce-b9b130d16f48/Untitled.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAT73L2G45O3KS52Y5%2F20201112%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20201112T122554Z&X-Amz-Expires=86400&X-Amz-Signature=1503f131bb8fac146d3c5c6dfa6c74e7e75fd5e761ad38456e75411450e3c1f9&X-Amz-SignedHeaders=host&response-content-disposition=filename%20%3D%22Untitled.png%22)
+![](https://sun9-56.userapi.com/impf/sXswa1ilkzoQEv2HveTBI912OnK7UWUWBZKv3g/QY7gzFfPdM4.jpg?size=535x68&quality=96&proxy=1&sign=f34904381dc8e2cbacf27c019680a804)
 
-which is basically sum of loglosses for activity classification and for conditional density function of time.
+The d here stands for the time difference between (j+1)-th and j-th events.
+ 
 

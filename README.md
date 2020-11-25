@@ -2,7 +2,7 @@
 Project of "Models of Sequence Data" course, Skoltech, 2020
 
 ## Problem statement
-The problem is to train a model to predict web user return time using browsing histories of many users.
+The problem is to develop a model that learns to predict users' return times from browsing histories of many other users. Some users do not come back, hence, our model needs to be able to both learn from such users' data and predict that some users will not come back during some specified prediction window.
 
 
 ## Structure
