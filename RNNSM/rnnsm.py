@@ -38,7 +38,8 @@ class RNNSM(nn.Module):
 
     def compute_loss(self, deltas, padding_mask, ret_mask, o_j):
         deltas_scaled = deltas * self.time_scale
-        common_term = -(torch.exp(o_j) / self.w - torch.exp(o_j + self.w * deltas_scaled) / self.w) * ~padding_mask
+        common_term = -(torch.exp(o_j) / self.w - \
+                        torch.exp(o_j + self.w * deltas_scaled) / self.w) * ~padding_mask
         ret_term = -(self.w * deltas_scaled + o_j) * ret_mask
         return common_term.sum() + ret_term.sum()
 
@@ -71,9 +72,11 @@ class RNNSM(nn.Module):
         return preds
 
 
-    def _s_t(self, last_o_j, deltas_scaled, broadcast_deltas=False):
+    def _s_t(self, last_o_j, deltas, broadcast_deltas=False):
         if broadcast_deltas:
-            out = torch.exp(torch.exp(last_o_j)[:, None] / self.w - torch.exp(last_o_j[:, None] + self.w * deltas_scaled[None, :]) / self.w)
+            out = torch.exp(torch.exp(last_o_j)[:, None] / self.w - \
+                    torch.exp(last_o_j[:, None] + self.w * deltas[None, :]) / self.w)
         else:
-            out = torch.exp(torch.exp(last_o_j) / self.w - torch.exp(last_o_j + self.w * deltas_scaled) / self.w)
+            out = torch.exp(torch.exp(last_o_j) / self.w - \
+                    torch.exp(last_o_j + self.w * deltas) / self.w)
         return out
