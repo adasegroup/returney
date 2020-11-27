@@ -1,62 +1,75 @@
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import torch.nn.functional as F
+
 
 class RMTPP(nn.Module):
     def __init__(self, model_cfg):
         super(RMTPP, self).__init__()
-        input_size, hidden_size, num_layers = model_cfg.input_size, model_cfg.hidden_size, model_cfg.num_layers
-        self.hidden = nn.RNN(input_size, hidden_size, num_layers, nonlinearity='relu', batch_first=True)
+        input_size, hidden_size = model_cfg.input_size, model_cfg.hidden_size
+        self.hidden = nn.RNN(input_size, hidden_size, nonlinearity='relu', batch_first=True)
         self.n_num_feats = model_cfg.n_num_feats
-        
-        
+
         cat_sizes = model_cfg.cat_sizes
         emb_dims = model_cfg.emb_dims
         self.embeddings = nn.ModuleList([nn.Embedding(cat_size + 1, emb_dim, padding_idx=0) for cat_size, emb_dim
                                          in zip(cat_sizes, emb_dims)])
-        
+
         self.marker_outs = nn.ModuleList([nn.Linear(hidden_size, cat_sizes) for cat_size in cat_sizes])
+        self.input_dropout = nn.Dropout(model_cfg.dropout)
+
+        self.marker_weights = model_cfg.marker_weights
         self.output_past_influence = nn.Linear(hidden_size, 1)
         self.w = model_cfg.w
-        self.b = model_cfg.b
         self.time_scale = model_cfg.time_scale
-      
-    
+
+
     def forward(self, cat_feats, num_feats, lengths):
         x = torch.zeros((cat_feats.size(0), cat_feats.size(1), 0)).to(cat_feats.device)
         for i, emb in enumerate(self.embeddings):
             x = torch.cat([x, emb(cat_feats[:, :, i])], axis=-1)
         x = torch.cat([x, num_feats], axis=-1)
+        x = self.input_dropout(x)
         x = pack_padded_sequence(x, lengths=lengths, batch_first=True)
         h_j = self.hidden(x)
         h_j = pad_packed_sequence(h_j)
         o_j = self.output_past_influence(h_j).squeeze()
         ys_j = []
-        for layer in self.marker_outs:
-            ys_j.append(layer(h_j))
+        for out in self.marker_outs:
+            ys_j.append(out(h_j))
         return o_j, ys_j
-        
-        
-    def compute_loss(self, deltas, o_j, ys_j):
-        total_loss = torch.log(self._f_t(o_j, deltas))
-        for y_j in ys_j:
-            total_loss += torch.log(torch.sum(torch.exp(y_j) / torch.sum(torch.exp(y_j))))
-        return total_loss
-    
-    
+
+
+    def compute_loss(self, deltas, padding_mask, o_j, ys_j, ys_true):
+        deltas_scaled = deltas * self.time_scale
+        f_deltas = self._f_t(o_j, deltas_scaled) * ~padding_mask
+        time_prediction_loss = torch.log(f_deltas).sum()
+        markers_loss = 0
+        for i, (w, y_j, y_true) in enumerate(zip(self.marker_weights, ys_j, ys_true)):
+            markers_loss += w * F.cross_entropy(y_j, y_true, ignore_index=0, reduction='sum')
+        return time_prediction_loss + markers_loss
+
+
     def predict(self, o_j, t_j):
         """
         Predicts the timing of the next event
         """
-        last_o_j = o_j[torch.arange(o_j.size(0)), lengths] # why not o_j[:, lengths]?
-        timesteps = arange2d(t_j, t_j + 1000 * self.time_scale, self.time_scale)
-        deltas = timesteps - t_j[:, None]
+        t_j_scaled = t_j * self.time_scale
+        last_o_j = o_j[torch.arange(o_j.size(0)), lengths]
+        deltas = torch.arange(0, 1000 * self.time_scale, self.time_scale).to(o_j.device)
+        timesteps = t_j_scaled[:, None] + deltas[None, :]
 
-        f_deltas = self._f_t(o_j, deltas)
-        return trapz(f_deltas.cpu(), timesteps.cpu())
+        f_deltas = self._f_t(last_o_j, deltas, broadcast_deltas=True)
+        tf_deltas = timesteps * f_deltas
+        return t_j.cpu().numpy() + trapz(tf_deltas.cpu(), timesteps.cpu()) / self.time_scale
 
 
-    def _f_t(self, o_j, deltas):
-        lambda_t = torch.exp(o_j + self.w*deltas + self.b)
-        f_t = torch.exp(lambda_t + 1/self.w * torch.exp(o_j + self.b) - 1/self.w * lambda_t)
-        return f_t.to(o_j.device)
+    def _f_t(self, last_o_j, deltas, broadcast_deltas=False):
+        if broadcast_deltas:
+            lambda_t = torch.exp(last_o_j[:, None] + self.w * deltas[None, :])
+            f_t = torch.exp(torch.log(lambda_t) + torch.exp(last_o_j)[:, None] / self.w - lambda_t / self.w)
+        else:
+            lambda_t = torch.exp(last_o_j + self.w * deltas)
+            f_t = torch.exp(torch.log(lambda_t) + torch.exp(last_o_j) / self.w - lambda_t / self.w)
+        return f_t
