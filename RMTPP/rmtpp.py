@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 class RMTPP(nn.Module):
     def __init__(self, model_cfg):
-        super(RMTPP, self).__init__()
+        super().__init__()
         input_size, hidden_size = model_cfg.input_size, model_cfg.hidden_size
         self.hidden = nn.RNN(input_size, hidden_size, nonlinearity='relu', batch_first=True)
         self.n_num_feats = model_cfg.n_num_feats
@@ -16,7 +16,7 @@ class RMTPP(nn.Module):
         self.embeddings = nn.ModuleList([nn.Embedding(cat_size + 1, emb_dim, padding_idx=0) for cat_size, emb_dim
                                          in zip(cat_sizes, emb_dims)])
 
-        self.marker_outs = nn.ModuleList([nn.Linear(hidden_size, cat_sizes) for cat_size in cat_sizes])
+        self.marker_outs = nn.ModuleList([nn.Linear(hidden_size, cat_size+1) for cat_size in cat_sizes])
         self.input_dropout = nn.Dropout(model_cfg.dropout)
 
         self.marker_weights = model_cfg.marker_weights
@@ -31,24 +31,27 @@ class RMTPP(nn.Module):
             x = torch.cat([x, emb(cat_feats[:, :, i])], axis=-1)
         x = torch.cat([x, num_feats], axis=-1)
         x = self.input_dropout(x)
-        x = pack_padded_sequence(x, lengths=lengths, batch_first=True)
-        h_j = self.hidden(x)
-        h_j = pad_packed_sequence(h_j)
+        x = pack_padded_sequence(x, lengths=lengths, batch_first=True, enforce_sorted=False)
+        h_j, _ = self.hidden(x)
+        h_j, lengths = pad_packed_sequence(h_j, batch_first=True)
         o_j = self.output_past_influence(h_j).squeeze()
         ys_j = []
         for out in self.marker_outs:
             ys_j.append(out(h_j))
+
         return o_j, ys_j
 
 
     def compute_loss(self, deltas, padding_mask, o_j, ys_j, ys_true):
+        o_j = o_j[..., None]
         deltas_scaled = deltas * self.time_scale
-        f_deltas = self._f_t(o_j, deltas_scaled) * ~padding_mask
+        f_deltas = self._f_t(o_j, deltas_scaled)[~padding_mask]
         time_prediction_loss = torch.log(f_deltas).sum()
         markers_loss = 0
         for i, (w, y_j, y_true) in enumerate(zip(self.marker_weights, ys_j, ys_true)):
-            markers_loss += w * F.cross_entropy(y_j, y_true, ignore_index=0, reduction='sum')
-        return time_prediction_loss + markers_loss
+            markers_loss += w * F.cross_entropy(y_j.flatten(0, -2), y_true.flatten(), ignore_index=0, reduction='sum')
+        print(f"Time prediction loss: {time_prediction_loss}\nMarkers loss: {markers_loss}\nf_deltas.min(): {f_deltas.min()}\n" + "-"*20)
+        return (time_prediction_loss + markers_loss) / torch.sum(~padding_mask)
 
 
     def predict(self, o_j, t_j):

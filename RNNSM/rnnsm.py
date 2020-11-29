@@ -6,13 +6,13 @@ import numpy as np
 
 
 class RNNSM(nn.Module):
-    def __init__(self, model_cfg, pred_start):
-        super(GrobLSTM, self).__init__()
+    def __init__(self, model_cfg, ):
+        super().__init__()
         input_size, hidden_size = model_cfg.input_size, model_cfg.hidden_size
         self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
         cat_sizes = model_cfg.cat_sizes
         emb_dims = model_cfg.emb_dims
-        self.embeddings = nn.ModuleList([nn.Embedding(cat_size, emb_dim, padding_idx=0) for cat_size, emb_dim in zip(cat_sizes, emb_dims)])
+        self.embeddings = nn.ModuleList([nn.Embedding(cat_size+1, emb_dim, padding_idx=0) for cat_size, emb_dim in zip(cat_sizes, emb_dims)])
 
         total_emb_length = sum(emb_dims)
         self.input_dense = nn.Linear(total_emb_length + model_cfg.n_num_feats, input_size)
@@ -21,7 +21,6 @@ class RNNSM(nn.Module):
 
         self.w = model_cfg.w
         self.time_scale = model_cfg.time_scale
-        self.pred_start = pred_start * self.time_scale
 
     def forward(self, cat_feats, num_feats, lengths):
         x = torch.zeros((cat_feats.size(0), cat_feats.size(1), 0)).to(cat_feats.device)
@@ -29,19 +28,20 @@ class RNNSM(nn.Module):
             x = torch.cat([x, emb(cat_feats[:, :, i])], axis=-1)
         x = torch.cat([x, num_feats], axis=-1)
         x = self.input_dropout(torch.tanh(self.input_dense(x)))
-        x = pack_padded_sequence(x, lengths=lengths, batch_first=True)
+        x = pack_padded_sequence(x, lengths=lengths, batch_first=True, enforce_sorted=False)
         h_t, _ = self.lstm(x)
-        h_t, _ = pad_packed_sequence(h_t)
+        h_t, _ = pad_packed_sequence(h_t, batch_first=True)
         o_j = self.output_dense(h_t).squeeze()
         return o_j
 
 
     def compute_loss(self, deltas, padding_mask, ret_mask, o_j):
+        o_j = o_j[..., None]
         deltas_scaled = deltas * self.time_scale
         common_term = -(torch.exp(o_j) / self.w - \
                         torch.exp(o_j + self.w * deltas_scaled) / self.w) * ~padding_mask
         ret_term = -(self.w * deltas_scaled + o_j) * ret_mask
-        return common_term.sum() + ret_term.sum()
+        return (common_term.sum() + ret_term.sum()) / torch.sum(~padding_mask)
 
 
     def predict_standard(self, o_j, t_j, lengths):
@@ -52,10 +52,10 @@ class RNNSM(nn.Module):
         return t_j.cpu().numpy() + trapz(s_deltas.cpu(), deltas_scaled.cpu()) / self.time_scale
 
 
-    def predict(self, o_j, t_j, lenghts):
+    def predict(self, o_j, t_j, lenghts, pred_start):
         last_o_j = o_j[torch.arange(o_j.size(0)), lengths]
         t_j_scaled = t_j * self.time_scale
-        t_til_start = self.pred_start - t_j_scaled
+        t_til_start = pred_start * self.time_scale - t_j_scaled
         s_t_s = self._s_t(last_o_j, t_til_start)
 
         zeros = torch.zeros(t_j.size()).to(t_j.device)

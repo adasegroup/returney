@@ -13,7 +13,7 @@ rnnsm:
   emb_dims: [13]
   input_size: 13
   hidden_size: 13
-  n_num_feats: 0
+  n_num_feats: 1
   w: 0.15
   time_scale: 0.2
   dropout: 0.2
