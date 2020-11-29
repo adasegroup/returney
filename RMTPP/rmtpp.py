@@ -43,14 +43,13 @@ class RMTPP(nn.Module):
 
 
     def compute_loss(self, deltas, padding_mask, o_j, ys_j, ys_true):
-        o_j = o_j[..., None]
         deltas_scaled = deltas * self.time_scale
-        f_deltas = self._f_t(o_j, deltas_scaled)[~padding_mask]
-        time_prediction_loss = torch.log(f_deltas).sum()
+        time_prediction_loss = (-(torch.exp(o_j) / self.w - \
+                                  torch.exp(o_j + self.w * deltas_scaled) / self.w + \
+                                  self.w * deltas_scaled + o_j) * ~padding_mask).sum()
         markers_loss = 0
         for i, (w, y_j, y_true) in enumerate(zip(self.marker_weights, ys_j, ys_true)):
             markers_loss += w * F.cross_entropy(y_j.flatten(0, -2), y_true.flatten(), ignore_index=0, reduction='sum')
-        print(f"Time prediction loss: {time_prediction_loss}\nMarkers loss: {markers_loss}\nf_deltas.min(): {f_deltas.min()}\n" + "-"*20)
         return (time_prediction_loss + markers_loss) / torch.sum(~padding_mask)
 
 
@@ -76,3 +75,13 @@ class RMTPP(nn.Module):
             lambda_t = torch.exp(last_o_j + self.w * deltas)
             f_t = torch.exp(torch.log(lambda_t) + torch.exp(last_o_j) / self.w - lambda_t / self.w)
         return f_t
+
+
+    def _s_t(self, last_o_j, deltas, broadcast_deltas=False):
+        if broadcast_deltas:
+            out = torch.exp(torch.exp(last_o_j)[:, None] / self.w - \
+                    torch.exp(last_o_j[:, None] + self.w * deltas[None, :]) / self.w)
+        else:
+            out = torch.exp(torch.exp(last_o_j) / self.w - \
+                    torch.exp(last_o_j + self.w * deltas) / self.w)
+        return out

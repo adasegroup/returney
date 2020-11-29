@@ -36,7 +36,6 @@ class RNNSM(nn.Module):
 
 
     def compute_loss(self, deltas, padding_mask, ret_mask, o_j):
-        o_j = o_j[..., None]
         deltas_scaled = deltas * self.time_scale
         common_term = -(torch.exp(o_j) / self.w - \
                         torch.exp(o_j + self.w * deltas_scaled) / self.w) * ~padding_mask
