@@ -39,4 +39,38 @@ The RNN is trained using BPTT, maximizing the following log-likelihood function:
 
 The d here stands for the time difference between (j+1)-th and j-th events.
  
+ 
+## Usage
+1. Install the requirements:
+
+``` bash
+pip3 install -r ../requirements.txt
+```
+
+2. A model can be trained using `train.py` script:
+
+``` bash
+python3 train.py [--use_gpu] [-bs BATCH_SIZE] [-e N_EPOCHS]
+                [-seq MAX_SEQUENCE_LENGTH] [-d DATASET]
+                [-p MODEL_PATH]
+
+optional arguments:
+
+  --use_gpu             Using GPU
+  
+  -bs BATCH_SIZE, --batch_size BATCH_SIZE
+                        Batch size
+                        
+  -e N_EPOCHS, --n_epochs N_EPOCHS
+                        Number of epochs
+                        
+  -seq MAX_SEQUENCE_LENGTH, --max_sequence_length MAX_SEQUENCE_LENGTH
+                        Maximum length of sequences to train on
+                        
+  -d DATASET, --dataset DATASET
+                        Dataset to use. Allowed values: ["ATM"]
+                        
+  -p MODEL_PATH, --model_path MODEL_PATH
+                        Path where to save the model.
+```
 
