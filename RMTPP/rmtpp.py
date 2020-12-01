@@ -44,9 +44,10 @@ class RMTPP(nn.Module):
 
     def compute_loss(self, deltas, padding_mask, o_j, ys_j, ys_true):
         deltas_scaled = deltas * self.time_scale
-        time_prediction_loss = (-(torch.exp(o_j) / self.w - \
-                                  torch.exp(o_j + self.w * deltas_scaled) / self.w + \
-                                  self.w * deltas_scaled + o_j) * ~padding_mask).sum()
+        o_j = o_j[..., None]
+        p = o_j + self.w * deltas_scaled
+        time_prediction_loss = (p + (torch.exp(o_j) - torch.exp(p)) / self.w) * ~padding_mask
+        time_prediction_loss = -time_prediction_loss.sum()
         markers_loss = 0
         for i, (w, y_j, y_true) in enumerate(zip(self.marker_weights, ys_j, ys_true)):
             markers_loss += w * F.cross_entropy(y_j.flatten(0, -2), y_true.flatten(), ignore_index=0, reduction='sum')

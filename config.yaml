@@ -19,5 +19,5 @@ rnnsm:
   dropout: 0.2
 training:
   lr: 0.01
-  n_epochs: 5
+  n_epochs: 10
   
