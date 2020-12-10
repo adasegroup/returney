@@ -1,24 +1,27 @@
 import pandas as pd
+import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
+from sklearn.model_selection import train_test_split
 import torch
 import os
 
-class ATMDataset(Dataset):
-    def __init__(self, path, max_len=500):
+
+class ATMTrainDataset(Dataset):
+    def __init__(self, path, ids, max_len=500):
         super().__init__()
         self.max_len = max_len
         data = pd.read_csv(path)
-        self.ids = data['id']
-        self.times = data['time']
-        self.events = data['event'] + 1
-        self.time_seqs, self.event_seqs = self.generate_sequence()
+        self.ids = data['id'][np.isin(data['id'], ids)].to_numpy()
+        self.times = data['time'][np.isin(data['id'], ids)].to_numpy()
+        self.events = (data['event'] + 1)[np.isin(data['id'], ids)].to_numpy()
+        self.time_seqs, self.event_seqs = self._generate_sequences()
 
-    def generate_sequence(self):
+    def _generate_sequences(self):
         time_seqs = []
         event_seqs = []
         cur_start, cur_end = 0, 1
-        
+
         # нарезка датасета по последовательностям с одним id и максимальной длиной self.max_len
         while cur_start < len(self.ids):
             if cur_end < len(self.ids) and \
@@ -27,37 +30,137 @@ class ATMDataset(Dataset):
                 cur_end += 1
                 continue
             else:
-                time_seqs.append(torch.Tensor(self.times[cur_start:cur_end].to_numpy()))
-                event_seqs.append(torch.LongTensor(self.events[cur_start:cur_end].to_numpy()))
+                time_seqs.append(torch.Tensor(self.times[cur_start:cur_end]))
+                event_seqs.append(torch.LongTensor(self.events[cur_start:cur_end]))
                 cur_start, cur_end = cur_end, cur_end + 1
 
         return time_seqs, event_seqs
 
-    def __getitem__(self, item):
-        return self.time_seqs[item], self.event_seqs[item]
+    def __getitem__(self, id):
+        return self.time_seqs[id], self.event_seqs[id]
 
     def __len__(self):
         return len(self.time_seqs)
 
-    
-def pad_collate(batch):
-  (xx, yy) = zip(*batch)
-  x_lens = [len(x) for x in xx]
-  y_lens = [len(y) for y in yy]
-  xx_pad = pad_sequence(xx, batch_first=True, padding_value=0)
-  yy_pad = pad_sequence(yy, batch_first=True, padding_value=0)
 
-  return xx_pad[..., None], yy_pad[..., None], x_lens, y_lens
+class ATMTestDataset(Dataset):
+    def __init__(self,
+                 path,
+                 ids,
+                 activity_start,
+                 prediction_start,
+                 prediction_end,
+                 max_len=500):
+        super().__init__()
+        self.max_len = max_len
+        self.prediction_start = prediction_start
+        self.prediction_end = prediction_end
+        data = pd.read_csv(path)
+        has_event_in_activity = lambda x: ((x['time'] < prediction_start) &
+            (x['time'] > activity_start)).any()
+        valid_ids = data.groupby('id').filter(has_event_in_activity).id.unique()
+        valid_ids = np.intersect1d(valid_ids, ids)
+        self.ids = data['id'][np.isin(data['id'], valid_ids)].to_numpy()
+        self.times = data['time'][np.isin(data['id'], valid_ids)].to_numpy()
+        self.events = (data['event'] + 1)[np.isin(data['id'], valid_ids)].to_numpy()
+        self.time_seqs, self.targets, self.event_seqs = self._generate_sequences()
 
-def get_ATM_loader(path=None, batch_size=32, test=False, max_seq_len=500):
+    def _generate_sequences(self):
+        time_seqs = []
+        targets = []
+        event_seqs = []
+        cur_start, cur_end = 0, 1
+
+        # нарезка датасета по последовательностям с одним id и максимальной длиной self.max_len
+        while cur_start < len(self.ids):
+            if cur_end < len(self.ids) and \
+                    self.ids[cur_start] == self.ids[cur_end] and \
+                    self.times[cur_end] <= self.prediction_start:
+                cur_end += 1
+                continue
+            else:
+                if self.times[cur_end - 1] <= self.prediction_start or \
+                    self.times[cur_end - 1] > self.prediction_end:
+                    time_seqs.append(torch.Tensor(
+                        self.times[cur_end-self.max_len:cur_end]))
+                    targets.append(torch.Tensor([-1]))
+                    event_seqs.append(torch.LongTensor(
+                        self.events[cur_start-self.max_len:cur_end]))
+                else:
+                    time_seqs.append(torch.Tensor(
+                        self.times[cur_end-self.max_len-1:cur_end-1]))
+                    targets.append(torch.Tensor([self.times[cur_end-1]]))
+                    event_seqs.append(torch.LongTensor(
+                        self.events[cur_start-self.max_len-1:cur_end-1]))
+                cur_start, cur_end = cur_end, cur_end + 1
+
+        return time_seqs, targets, event_seqs
+
+    def __getitem__(self, id):
+        return self.time_seqs[id], self.targets[id], self.event_seqs[id]
+
+    def __len__(self):
+        return len(self.time_seqs)
+
+
+def pad_collate_train(batch):
+  (time_seqs, event_seqs) = zip(*batch)
+  lens = [len(seq) for seq in time_seqs]
+  time_seqs_padded = pad_sequence(time_seqs, batch_first=True, padding_value=0)
+  event_seqs_padded = pad_sequence(event_seqs, batch_first=True, padding_value=0)
+
+  return time_seqs_padded, event_seqs_padded, lens
+
+
+def pad_collate_test(batch):
+   pass
+
+
+def get_ATM_train_val_loaders(activity_start,
+                              prediction_start,
+                              prediction_end,
+                              path=None,
+                              batch_size=32,
+                              max_seq_len=500,
+                              train_ratio=0.7,
+                              seed=42):
     if path is None:
-        filename = '../data/ATM/train_day.csv' if not test else '../data/ATM/test_day.csv'
+        filename = 'data/ATM/train_day.csv'
     else:
         filename = path
-    ds = ATMDataset(filename, max_len=max_seq_len)
-    loader = DataLoader(dataset=ds, 
+
+    csv = pd.read_csv(filename)
+    ids = csv.id.unique()
+    train_ids, val_ids = train_test_split(ids, train_size=train_ratio, random_state=seed)
+    train_ds = ATMTrainDataset(filename, train_ids, max_len=max_seq_len)
+    train_loader = DataLoader(dataset=train_ds,
                         batch_size=batch_size,
-                        shuffle=True if not test else False,
-                        collate_fn=pad_collate,
+                        shuffle=True,
+                        collate_fn=pad_collate_train,
                         drop_last=True)
-    return loader
+
+    val_ds = ATMTestDataset(filename, val_ids, activity_start, prediction_start,
+                            prediction_end)
+    val_loader = DataLoader(dataset=val_ds,
+                        batch_size=batch_size,
+                        shuffle=False,
+                        collate_fn=pad_collate_test,
+                        drop_last=False)
+
+    return train_loader, val_loader
+
+
+def get_ATM_test_loader(path=None, batch_size=32, max_seq_len=500):
+    if path is None:
+        filename = 'test_day.csv'
+    else:
+        filename = path
+    test_ds = ATMTestDataset(filename, val_ids, activity_start, prediction_start,
+                            prediction_end)
+    test_loader = DataLoader(dataset=test_ds,
+                        batch_size=batch_size,
+                        shuffle=False,
+                        collate_fn=pad_collate_test,
+                        drop_last=False)
+
+    return test_loader
