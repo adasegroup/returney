@@ -80,3 +80,19 @@ class RNNSM(nn.Module):
             out = torch.exp(torch.exp(last_o_j) / self.w - \
                     torch.exp(last_o_j + self.w * deltas) / self.w)
         return out
+
+
+    def save_model(self, path):
+        torch.save({'lstm': self.lstm.state_dict(),
+                    'embeddings': self.embeddings.state_dict(),
+                    'input_dense': self.input_dense.state_dict(),
+                    'output_dense': self.output_dense.state_dict()
+                    }, path)
+
+
+    def load_model(self, path):
+        params = torch.load(path)
+        self.lstm.load_state_dict(params['lstm'])
+        self.embeddings.load_state_dict(params['embeddings'])
+        self.input_dense.load_state_dict(params['input_dense'])
+        self.output_dense.load_state_dict(params['output_dense'])

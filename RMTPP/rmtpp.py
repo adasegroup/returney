@@ -8,7 +8,7 @@ class RMTPP(nn.Module):
     def __init__(self, model_cfg):
         super().__init__()
         input_size, hidden_size = model_cfg.input_size, model_cfg.hidden_size
-        self.hidden = nn.RNN(input_size, hidden_size, nonlinearity='relu', batch_first=True)
+        self.rnn = nn.RNN(input_size, hidden_size, nonlinearity='relu', batch_first=True)
         self.n_num_feats = model_cfg.n_num_feats
 
         cat_sizes = model_cfg.cat_sizes
@@ -20,7 +20,7 @@ class RMTPP(nn.Module):
         self.input_dropout = nn.Dropout(model_cfg.dropout)
 
         self.marker_weights = model_cfg.marker_weights
-        self.output_past_influence = nn.Linear(hidden_size, 1)
+        self.output_dense = nn.Linear(hidden_size, 1)
         self.w = model_cfg.w
         self.time_scale = model_cfg.time_scale
 
@@ -32,9 +32,9 @@ class RMTPP(nn.Module):
         x = torch.cat([x, num_feats], axis=-1)
         x = self.input_dropout(x)
         x = pack_padded_sequence(x, lengths=lengths, batch_first=True, enforce_sorted=False)
-        h_j, _ = self.hidden(x)
+        h_j, _ = self.rnn(x)
         h_j, lengths = pad_packed_sequence(h_j, batch_first=True)
-        o_j = self.output_past_influence(h_j).squeeze()
+        o_j = self.output_dense(h_j).squeeze()
         ys_j = []
         for out in self.marker_outs:
             ys_j.append(out(h_j))
@@ -78,11 +78,15 @@ class RMTPP(nn.Module):
         return f_t
 
 
-    def _s_t(self, last_o_j, deltas, broadcast_deltas=False):
-        if broadcast_deltas:
-            out = torch.exp(torch.exp(last_o_j)[:, None] / self.w - \
-                    torch.exp(last_o_j[:, None] + self.w * deltas[None, :]) / self.w)
-        else:
-            out = torch.exp(torch.exp(last_o_j) / self.w - \
-                    torch.exp(last_o_j + self.w * deltas) / self.w)
-        return out
+    def save_model(self, path):
+        torch.save({'rnn': self.rnn.state_dict(),
+                    'embeddings': self.embeddings.state_dict(),
+                    'output_dense': self.output_dense.state_dict()
+                    }, path)
+
+
+    def load_model(self, path):
+        params = torch.load(path)
+        self.rnn.load_state_dict(params['rnn'])
+        self.embeddings.load_state_dict(params['embeddings'])
+        self.output_dense.load_state_dict(params['output_dense'])
