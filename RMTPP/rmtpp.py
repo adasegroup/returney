@@ -26,8 +26,8 @@ class RMTPP(nn.Module):
 
 
     def forward(self, cat_feats, num_feats, lengths):
-        x = torch.zeros((cat_feats.size(0), cat_feats.size(1), 0)).to(cat_feats.device)
-        for i, emb in enumerate(self.embeddings):
+        x = self.embeddings[0](cat_feats[:, :, 0])
+        for i, emb in enumerate(self.embeddings[1:], 1):
             x = torch.cat([x, emb(cat_feats[:, :, i])], axis=-1)
         x = torch.cat([x, num_feats], axis=-1)
         x = self.input_dropout(x)
