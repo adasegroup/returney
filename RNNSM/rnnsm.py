@@ -53,7 +53,7 @@ class RNNSM(nn.Module):
 
 
     def predict(self, o_j, t_j, lenghts, pred_start):
-        last_o_j = o_j[torch.arange(o_j.size(0)), lengths]
+        last_o_j = o_j[torch.arange(o_j.size(0)), lenghts - 1]
         t_j_scaled = t_j * self.time_scale
         t_til_start = pred_start * self.time_scale - t_j_scaled
         s_t_s = self._s_t(last_o_j, t_til_start)
