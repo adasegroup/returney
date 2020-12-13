@@ -18,7 +18,6 @@ prediction_end = 16500
 
 
 def calc_rmse(predicted, target):
-    print(predicted)
     predicted = predicted[target != -1]
     target = target[target != -1]
     return np.sqrt(np.mean((predicted - target) ** 2))
