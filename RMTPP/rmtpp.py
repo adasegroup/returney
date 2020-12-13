@@ -26,8 +26,8 @@ class RMTPP(nn.Module):
         self.time_scale = model_cfg.time_scale
 
     def forward(self, cat_feats, num_feats, lengths):
-        x = self.embeddings[0](cat_feats[:, :, 0])
-        for i, emb in enumerate(self.embeddings[1:], 1):
+        x = torch.zeros(*cat_feats.size()[:2], 0).to(cat_feats.device)
+        for i, emb in enumerate(self.embeddings):
             x = torch.cat([x, emb(cat_feats[:, :, i])], axis=-1)
         x = torch.cat([x, num_feats], axis=-1)
         x = self.input_dropout(x)
@@ -43,28 +43,32 @@ class RMTPP(nn.Module):
 
     def compute_loss(self, deltas, padding_mask, o_j, ys_j, ys_true):
         deltas_scaled = deltas * self.time_scale
-        o_j = o_j[..., None]
         p = o_j + self.w * deltas_scaled
         time_prediction_loss = (p + (torch.exp(o_j) - torch.exp(p)) / self.w) * ~padding_mask
         time_prediction_loss = -time_prediction_loss.sum()
         markers_loss = 0
-        for i, (w, y_j, y_true) in enumerate(zip(self.marker_weights, ys_j, ys_true)):
-            markers_loss += w * F.cross_entropy(y_j.flatten(0, -2), y_true.flatten(), ignore_index=0, reduction='sum')
+        for i, (w, y_j) in enumerate(zip(self.marker_weights, ys_j)):
+            y_true = ys_true[:, :, i]
+            n_classes = y_j.size(-1)
+            markers_loss += w * F.cross_entropy(y_j.view(-1, n_classes),
+                y_true.view(-1),
+                ignore_index=0,
+                reduction='sum')
         return (time_prediction_loss + markers_loss) / torch.sum(~padding_mask)
 
     def predict(self, o_j, t_j, lengths):
         """
         Predicts the timing of the next event
         """
-        t_j_scaled = t_j * self.time_scale
-        last_o_j = o_j[torch.arange(o_j.size(0)), lengths - 1]
-        last_t_j = t_j_scaled[torch.arange(t_j_scaled.size(0)), lengths - 1]
-        deltas = torch.arange(0, 1000 * self.time_scale, self.time_scale).to(o_j.device)
-        timesteps = last_t_j[:, None] + deltas[None, :]
-
-        f_deltas = self._f_t(last_o_j, deltas, broadcast_deltas=True)
-        tf_deltas = timesteps * f_deltas
         with torch.no_grad():
+            t_j_scaled = t_j * self.time_scale
+            last_o_j = o_j[torch.arange(o_j.size(0)), lengths - 1]
+            last_t_j = t_j_scaled[torch.arange(t_j_scaled.size(0)), lengths - 1]
+            deltas = torch.arange(0, 1000 * self.time_scale, self.time_scale).to(o_j.device)
+            timesteps = last_t_j[:, None] + deltas[None, :]
+
+            f_deltas = self._f_t(last_o_j, deltas, broadcast_deltas=True)
+            tf_deltas = timesteps * f_deltas
             result = last_t_j.cpu().numpy() + trapz(tf_deltas.cpu(), timesteps.cpu()) / self.time_scale
         return result
 

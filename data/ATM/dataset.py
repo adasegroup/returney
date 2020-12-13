@@ -12,51 +12,95 @@ class ATMTrainDataset(Dataset):
         data = pd.read_csv(path)
         return data['id'].values
 
-    def __init__(self, path, ids=None, max_len=500):
+    def __init__(self, data, include_last_event=True, max_len=500):
         super().__init__()
+        self._ids = data['id'].to_numpy()
+        self._times = data['time'].to_numpy()
+        self._events = (data['event'] + 1).to_numpy()
+        self._time_deltas = data['time_delta_scaled'].to_numpy()
+        self.include_last_event = include_last_event
         self.max_len = max_len
-        data = pd.read_csv(path)
-        self.ids = data['id'][np.isin(data['id'], ids)].to_numpy()
-        self.times = data['time'][np.isin(data['id'], ids)].to_numpy()
-        self.events = (data['event'] + 1)[np.isin(data['id'], ids)].to_numpy()
-        self.time_seqs, self.time_deltas_seqs, self.event_seqs = self._generate_sequences()
+        self._generate_sequences()
 
     def _generate_sequences(self):
-        time_seqs = []
-        event_seqs = []
-        time_deltas_seqs = []
+        timestamps = []
+        cat_feats = []
+        num_feats = []
+        returned = []
         cur_start, cur_end = 0, 1
 
         # нарезка датасета по последовательностям с одним id и максимальной длиной self.max_len
-        while cur_start < len(self.ids):
-            if cur_end < len(self.ids) and \
-                    self.ids[cur_start] == self.ids[cur_end] and \
+        while cur_start < len(self._ids):
+            if cur_end < len(self._ids) and \
+                    self._ids[cur_start] == self._ids[cur_end] and \
                     cur_end - cur_start < self.max_len:
                 cur_end += 1
                 continue
             else:
-                time_seqs.append(torch.Tensor(self.times[cur_start:cur_end]))
-                event_seqs.append(torch.LongTensor(self.events[cur_start:cur_end]))
+                # if cur_end belongs to id of the next ATM:
+                if cur_end == len(self._ids) or \
+                    self._ids[cur_start] != self._ids[cur_end]:
+                    returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1) + [False]))
+                    if self.include_last_event:
+                        ts = np.concatenate([self._times[cur_start:cur_end],
+                                            np.zeros(1)])
+                        timestamps.append(torch.FloatTensor(ts))
+                        cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end]))
+                        num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end]))
+                    else:
+                        timestamps.append(torch.FloatTensor(self._times[cur_start:cur_end]))
+                        cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
+                        num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end - 1]))
+                else:
+                    returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1)))
+                    timestamps.append(torch.FloatTensor(self._times[cur_start:cur_end]))
+                    cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
+                    num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end - 1]))
+
                 cur_start, cur_end = cur_end, cur_end + 1
 
-                time_deltas_seqs.append(torch.cat([
-                    torch.zeros(1),
-                    time_seqs[-1][1:] - time_seqs[-1][:-1]],
-                    dim=0))
-
-        return time_seqs, time_deltas_seqs, event_seqs
+        self.timestamps = timestamps
+        self.cat_feats = list(map(lambda x: x.unsqueeze(-1), cat_feats))
+        self.num_feats = list(map(lambda x: x.unsqueeze(-1), num_feats))
+        self.returned = returned
 
     def __getitem__(self, id):
-        return self.time_seqs[id], self.time_deltas_seqs[id], self.event_seqs[id]
+        return self.timestamps[id], \
+            self.cat_feats[id], \
+            self.num_feats[id], \
+            self.returned[id]
 
     def __len__(self):
-        return len(self.time_seqs)
+        return len(self.timestamps)
+
+
+def pad_collate_train_rnnsm(batch):
+    (timestamps, cat_feats, num_feats, return_mask) = zip(*batch)
+    lens = np.array([len(seq) for seq in cat_feats])
+    timestamps_padded = pad_sequence(timestamps, batch_first=True, padding_value=0)
+    cat_feats_padded = pad_sequence(cat_feats, batch_first=True, padding_value=0)
+    num_feats_padded = pad_sequence(num_feats, batch_first=True, padding_value=0)
+    return_mask = pad_sequence(return_mask, batch_first=True, padding_value=0)
+    padding_mask = (cat_feats_padded == 0).squeeze()
+
+    return timestamps_padded, \
+        cat_feats_padded, \
+        num_feats_padded, \
+        padding_mask, \
+        return_mask, \
+        lens
+
+
+def pad_collate_train_rmtpp(batch):
+    # simply drop return mask
+    t, c, n, p, _, l = pad_collate_train_rnnsm(batch)
+
+    return t, c, n, p, l
 
 
 class ATMTestDataset(Dataset):
     def __init__(self,
-                 path,
-                 ids,
+                 data,
                  activity_start,
                  prediction_start,
                  prediction_end,
@@ -65,90 +109,86 @@ class ATMTestDataset(Dataset):
         self.max_len = max_len
         self.prediction_start = prediction_start
         self.prediction_end = prediction_end
-        data = pd.read_csv(path)
         has_event_in_activity = lambda x: ((x['time'] < prediction_start) &
                                            (x['time'] > activity_start)).any()
         valid_ids = data.groupby('id').filter(has_event_in_activity).id.unique()
-        valid_ids = np.intersect1d(valid_ids, ids)
-        self.ids = data['id'][np.isin(data['id'], valid_ids)].to_numpy()
-        self.times = data['time'][np.isin(data['id'], valid_ids)].to_numpy()
-        self.events = (data['event'] + 1)[np.isin(data['id'], valid_ids)].to_numpy()
-        self.time_seqs, self.time_deltas_seqs, self.targets, self.event_seqs = self._generate_sequences()
+        self._ids = data['id'][np.isin(data['id'], valid_ids)].to_numpy()
+        self._times = data['time'][np.isin(data['id'], valid_ids)].to_numpy()
+        self._events = (data['event'] + 1)[np.isin(data['id'], valid_ids)].to_numpy()
+        self._time_deltas = data['time_delta_scaled'].to_numpy()
+        self._generate_sequences()
 
     def _generate_sequences(self):
-        time_seqs = []
+        timestamps = []
+        cat_feats = []
+        num_feats = []
         targets = []
-        event_seqs = []
-        time_deltas_seqs = []
         cur_start, cur_end = 0, 1
 
         # нарезка датасета по последовательностям с одним id и максимальной длиной self.max_len
-        while cur_start < len(self.ids) - 1:
-            if cur_end < len(self.ids) - 1 and \
-                    self.ids[cur_start] == self.ids[cur_end] and \
-                    self.times[cur_end] <= self.prediction_start:
+        while cur_start < len(self._ids) - 1:
+            if cur_end < len(self._ids) - 1 and \
+                    self._ids[cur_start] == self._ids[cur_end] and \
+                    self._times[cur_end] <= self.prediction_start:
                 cur_end += 1
                 continue
             else:
-                if self.times[cur_end] <= self.prediction_start or \
-                        self.times[cur_end] > self.prediction_end:
-                    time_seqs.append(torch.Tensor(
-                        self.times[max(cur_start, cur_end - self.max_len):cur_end]))
-                    targets.append(torch.Tensor([-1]))
-                    event_seqs.append(torch.LongTensor(
-                        self.events[max(cur_end - self.max_len, cur_start):cur_end]))
-
-                    time_deltas_seqs.append(torch.cat([
-                        torch.zeros(1),
-                        time_seqs[-1][1:] - time_seqs[-1][:-1]],
-                        dim=0))
+                start_id = max(cur_start, cur_end - self.max_len)
+                if self._times[cur_end] <= self.prediction_start or \
+                        self._times[cur_end] > self.prediction_end:
+                    timestamps.append(torch.FloatTensor(
+                        self._times[start_id:cur_end]))
+                    cat_feats.append(torch.LongTensor(
+                        self._events[start_id:cur_end]))
+                    num_feats.append(torch.FloatTensor(
+                        self._time_deltas[start_id:cur_end]))
+                    targets.append(torch.FloatTensor([-1]))
                 else:
-                    time_seqs.append(torch.Tensor(
-                        self.times[max(cur_start, cur_end - self.max_len):cur_end]))
-                    targets.append(torch.Tensor([self.times[cur_end]]))
-                    event_seqs.append(torch.LongTensor(
-                        self.events[max(cur_end - self.max_len, cur_start):cur_end]))
+                    timestamps.append(torch.FloatTensor(
+                        self._times[start_id:cur_end]))
+                    cat_feats.append(torch.LongTensor(
+                        self._events[start_id:cur_end]))
+                    num_feats.append(torch.FloatTensor(
+                        self._time_deltas[start_id:cur_end]))
+                    targets.append(torch.FloatTensor([self._times[cur_end]]))
 
-                    time_deltas_seqs.append(torch.cat([
-                        torch.zeros(1),
-                        time_seqs[-1][1:] - time_seqs[-1][:-1]],
-                        dim=0))
-
-                while cur_end < len(self.ids) - 1 and self.ids[cur_start] == self.ids[cur_end]:
+                while cur_end < len(self._ids) - 1 and \
+                    self._ids[cur_start] == self._ids[cur_end]:
                     cur_start, cur_end = cur_end, cur_end + 1
                 cur_start, cur_end = cur_end, cur_end + 1
 
-        return time_seqs, time_deltas_seqs, targets, event_seqs
+        self.timestamps = timestamps
+        self.cat_feats = list(map(lambda x: x.unsqueeze(-1), cat_feats))
+        self.num_feats = list(map(lambda x: x.unsqueeze(-1), num_feats))
+        self.targets = targets
 
     def __getitem__(self, id):
-        return self.time_seqs[id], self.time_deltas_seqs[id], self.targets[id], self.event_seqs[id]
+        return self.timestamps[id], \
+            self.cat_feats[id], \
+            self.num_feats[id], \
+            self.targets[id]
 
     def __len__(self):
-        return len(self.time_seqs)
-
-
-def pad_collate_train(batch):
-    (time_seqs, time_deltas_seqs, event_seqs) = zip(*batch)
-    lens = np.array([len(seq) for seq in time_seqs])
-    time_seqs_padded = pad_sequence(time_seqs, batch_first=True, padding_value=0)
-    event_seqs_padded = pad_sequence(event_seqs, batch_first=True, padding_value=0)
-    time_deltas_seqs_padded = pad_sequence(time_deltas_seqs, batch_first=True, padding_value=0)
-
-    return time_seqs_padded[..., None], time_deltas_seqs_padded[..., None], event_seqs_padded[..., None], lens
+        return len(self.timestamps)
 
 
 def pad_collate_test(batch):
-    (time_seqs, time_deltas_seqs, targets, event_seqs) = zip(*batch)
-    lens = np.array([len(seq) for seq in time_seqs])
-    time_seqs_padded = pad_sequence(time_seqs, batch_first=True, padding_value=0)
-    event_seqs_padded = pad_sequence(event_seqs, batch_first=True, padding_value=0)
-    time_deltas_seqs_padded = pad_sequence(time_deltas_seqs, batch_first=True, padding_value=0)
-    targets_padded = pad_sequence(targets, batch_first=True, padding_value=0)
-    return time_seqs_padded[..., None], time_deltas_seqs_padded[..., None], targets_padded, event_seqs_padded[
-        ..., None], lens
+    (timestamps, cat_feats, num_feats, targets) = zip(*batch)
+    lens = np.array([len(seq) for seq in timestamps])
+    timestamps_padded = pad_sequence(timestamps, batch_first=True, padding_value=0)
+    cat_feats_padded = pad_sequence(cat_feats, batch_first=True, padding_value=0)
+    num_feats_padded = pad_sequence(num_feats, batch_first=True, padding_value=0)
+    targets = torch.FloatTensor(targets).squeeze()
+
+    return timestamps_padded, \
+        cat_feats_padded, \
+        num_feats_padded, \
+        targets, \
+        lens
 
 
-def get_ATM_train_val_loaders(activity_start,
+def get_ATM_train_val_loaders(model,
+                              activity_start,
                               prediction_start,
                               prediction_end,
                               path=None,
@@ -161,17 +201,21 @@ def get_ATM_train_val_loaders(activity_start,
     else:
         filename = path
 
-    csv = pd.read_csv(filename)
-    ids = csv.id.unique()
+    assert(model in ['RMTPP', 'RNNSM'], 'Invalid model')
+    data = pd.read_csv(filename)
+    ids = data.id.unique()
     train_ids, val_ids = train_test_split(ids, train_size=train_ratio, random_state=seed)
-    train_ds = ATMTrainDataset(filename, train_ids, max_len=max_seq_len)
+    train, val = data[np.isin(data.id, train_ids)], data[np.isin(data.id, val_ids)]
+    train_ds = ATMTrainDataset(train, max_len=max_seq_len)
+    collate_fn = pad_collate_train_rmtpp if model == 'RMTPP' \
+        else pad_collate_train_rnnsm
     train_loader = DataLoader(dataset=train_ds,
                               batch_size=batch_size,
                               shuffle=True,
-                              collate_fn=pad_collate_train,
+                              collate_fn=collate_fn,
                               drop_last=True)
 
-    val_ds = ATMTestDataset(filename, val_ids, activity_start, prediction_start,
+    val_ds = ATMTestDataset(val, activity_start, prediction_start,
                             prediction_end)
     val_loader = DataLoader(dataset=val_ds,
                             batch_size=batch_size,

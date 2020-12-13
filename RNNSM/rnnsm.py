@@ -36,7 +36,6 @@ class RNNSM(nn.Module):
 
 
     def compute_loss(self, deltas, padding_mask, ret_mask, o_j):
-        o_j = o_j[..., None]
         deltas_scaled = deltas * self.time_scale
         p = o_j + self.w * deltas_scaled
         common_term = -(torch.exp(o_j) - torch.exp(p)) / self.w * ~padding_mask
@@ -46,28 +45,32 @@ class RNNSM(nn.Module):
 
     def predict_standard(self, o_j, t_j, lengths):
         last_o_j = o_j[torch.arange(o_j.size(0)), lengths]
+        last_t_j = t_j[torch.arange(t_j.size(0)), lengths - 1]
         deltas = torch.arange(0, 1000 * self.time_scale, self.time_scale).to(o_j.device)
 
         s_deltas = self._s_t(last_o_j, deltas, broadcast_deltas=True)
-        return t_j.cpu().numpy() + trapz(s_deltas.cpu(), deltas_scaled.cpu()) / self.time_scale
+        return last_t_j.cpu().numpy() + trapz(s_deltas.cpu(), deltas_scaled.cpu()) / self.time_scale
 
 
-    def predict(self, o_j, t_j, lenghts, pred_start):
-        last_o_j = o_j[torch.arange(o_j.size(0)), lenghts - 1]
-        t_j_scaled = t_j * self.time_scale
-        t_til_start = pred_start * self.time_scale - t_j_scaled
-        s_t_s = self._s_t(last_o_j, t_til_start)
+    def predict(self, o_j, t_j, lengths, pred_start):
+        with torch.no_grad():
+            batch_size = o_j.size(0)
+            last_o_j = o_j[torch.arange(batch_size), lengths - 1]
+            last_t_j = t_j[torch.arange(batch_size), lengths - 1]
+            t_til_start = (pred_start - last_t_j) * self.time_scale
+            s_t_s = self._s_t(last_o_j, t_til_start)
 
-        zeros = torch.zeros(t_j.size()).to(t_j.device)
-        deltas = torch.arange(0, 1000 * self.time_scale, self.time_scale).to(o_j.device)
-        s_deltas = self._s_t(last_o_j, deltas)
+            zeros = torch.zeros(last_t_j.size()).to(last_t_j.device)
+            deltas = torch.arange(0, 1000 * self.time_scale, self.time_scale).to(o_j.device)
+            s_deltas = self._s_t(last_o_j, deltas, broadcast_deltas=True)
 
-        preds = np.zeros(o_j.size(0))
-        for i, ith_deltas in enumerate(deltas):
-            ith_t_s, ith_s_t_s = t_til_start[i], s_t_s[i]
-            pred_delta = trapz(s_deltas[ith_deltas < ith_t_s].cpu(), ith_deltas[ith_deltas < ith_t_s].cpu()) + \
-                           trapz(s_deltas[ith_deltas >= ith_t_s].cpu(), ith_deltas[ith_deltas >= ith_t_s].cpu()) / ith_s_t_s.item()
-            preds[i] = t_j[i].cpu().numpy() + pred_delta / self.time_scale
+            preds = np.zeros(batch_size)
+            for i in range(batch_size):
+                ith_t_s, ith_s_t_s = t_til_start[i], s_t_s[i]
+                ith_s_deltas = s_deltas[i]
+                pred_delta = trapz(ith_s_deltas[deltas < ith_t_s].cpu(), deltas[deltas < ith_t_s].cpu())
+                pred_delta += trapz(ith_s_deltas[deltas >= ith_t_s].cpu(), deltas[deltas >= ith_t_s].cpu()) / ith_s_t_s.item()
+                preds[i] = last_t_j[i].cpu().numpy() + pred_delta / self.time_scale
 
         return preds
 
@@ -79,7 +82,7 @@ class RNNSM(nn.Module):
         else:
             out = torch.exp(torch.exp(last_o_j) / self.w - \
                     torch.exp(last_o_j + self.w * deltas) / self.w)
-        return out
+        return out.squeeze()
 
 
     def save_model(self, path):
