@@ -11,7 +11,7 @@ rmtpp:
   time_scale: 0.002
   max_seq_len: 25
   dropout: 0.2
-  integration_steps: 500
+  integration_points: 500
 rnnsm:
   cat_sizes: [22]
   emb_dims: [20]
@@ -20,10 +20,10 @@ rnnsm:
   hidden_size: 16
   n_num_feats: 1
   w: 0.15
-  time_scale: 0.1
+  time_scale: 0.01
   max_seq_len: 25
   dropout: 0.2
-  integration_steps: 500
+  integration_points: 1000
 training:
   lr: 0.001
   n_epochs: 30

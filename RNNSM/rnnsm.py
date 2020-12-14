@@ -17,13 +17,13 @@ class RNNSM(nn.Module):
         total_emb_length = sum(emb_dims)
         self.input_dense = nn.Linear(total_emb_length + cfg.n_num_feats, cfg.input_size)
         self.dropout = nn.Dropout(cfg.dropout)
-        self.output_dense = nn.Linear(cfg.hidden_size, 1)
+        self.output_dense = nn.Linear(cfg.hidden_size, 1, bias=False)
 
         self.hidden = nn.Linear(cfg.lstm_hidden_size, cfg.hidden_size)
+
         self.w = cfg.w
         self.time_scale = cfg.time_scale
-
-        self.integration_steps = cfg.integration_steps
+        self.integration_points = cfg.integration_points
 
 
     def forward(self, cat_feats, num_feats, lengths):
@@ -44,8 +44,8 @@ class RNNSM(nn.Module):
         deltas_scaled = deltas * self.time_scale
         p = o_j + self.w * deltas_scaled
         common_term = -(torch.exp(o_j) - torch.exp(p)) / self.w * ~padding_mask
-        common_term = common_term.sum() / torch.sum(~padding_mask)
-        ret_term = (-p * ret_mask).sum() / torch.sum(ret_mask)
+        common_term = common_term.sum() / (~padding_mask).sum()
+        ret_term = (-p * ret_mask).sum() / ret_mask.sum()
         return common_term + ret_term
 
 
@@ -53,7 +53,7 @@ class RNNSM(nn.Module):
         with torch.no_grad():
             last_o_j = o_j[torch.arange(o_j.size(0)), lengths - 1]
             last_t_j = t_j[torch.arange(t_j.size(0)), lengths - 1]
-            deltas = torch.arange(0, 1000 * self.time_scale, self.time_scale).to(o_j.device)
+            deltas = torch.arange(0, self.integration_points * self.time_scale, self.time_scale).to(o_j.device)
 
             s_deltas = self._s_t(last_o_j, deltas, broadcast_deltas=True)
         return last_t_j.cpu().numpy() + trapz(s_deltas.cpu(), deltas_scaled.cpu()) / self.time_scale
@@ -68,10 +68,9 @@ class RNNSM(nn.Module):
             t_til_start = (pred_start - last_t_j) * self.time_scale
 
             s_t_s = self._s_t(last_o_j, t_til_start)
-            s_t_s = torch.clamp(s_t_s, 1e-3, 1e0)
 
             zeros = torch.zeros(last_t_j.size()).to(last_t_j.device)
-            deltas = torch.arange(0, self.integration_steps * self.time_scale, self.time_scale).to(o_j.device)
+            deltas = torch.arange(0, self.integration_points * self.time_scale, self.time_scale).to(o_j.device)
             s_deltas = self._s_t(last_o_j, deltas, broadcast_deltas=True)
 
             preds = np.zeros(batch_size)

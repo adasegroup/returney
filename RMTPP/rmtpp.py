@@ -24,11 +24,11 @@ class RMTPP(nn.Module):
         self.time_loss_weight = cfg.time_loss_weight
 
         self.output_dense = nn.Linear(cfg.hidden_size, 1)
-        self.w = cfg.w
-        self.time_scale = cfg.time_scale
         self.time_pred_head = nn.Linear(cfg.hidden_size, 1, bias=False)
 
-        self.integration_steps = cfg.integration_steps
+        self.w = cfg.w
+        self.time_scale = cfg.time_scale
+        self.integration_points = cfg.integration_points
 
     def forward(self, cat_feats, num_feats, lengths):
         x = torch.zeros(*cat_feats.size()[:2], 0).to(cat_feats.device)
@@ -78,8 +78,7 @@ class RMTPP(nn.Module):
             last_o_j = o_j[torch.arange(batch_size), lengths - 1]
             last_deltas_pred = deltas_pred[torch.arange(batch_size), lengths - 1]
 
-            #return last_t_j + torch.relu(last_deltas_pred)
-            deltas = torch.arange(0, self.integration_steps * self.time_scale, self.time_scale).to(o_j.device)
+            deltas = torch.arange(0, self.integration_points * self.time_scale, self.time_scale).to(o_j.device)
             timestamps = deltas[None, :] + last_t_j[:, None] * self.time_scale
 
             f_deltas = self._f_t(last_o_j, deltas, broadcast_deltas=True)
@@ -104,7 +103,8 @@ class RMTPP(nn.Module):
         torch.save({'lstm': self.lstm.state_dict(),
                     'embeddings': self.embeddings.state_dict(),
                     'output_dense': self.output_dense.state_dict(),
-                    'hidden': self.hidden.state_dict()
+                    'hidden': self.hidden.state_dict(),
+                    'time_pred_head': self.time_pred_head.state_dict()
                     }, path)
 
 
@@ -114,3 +114,4 @@ class RMTPP(nn.Module):
         self.embeddings.load_state_dict(params['embeddings'])
         self.output_dense.load_state_dict(params['output_dense'])
         self.hidden.load_state_dict(params['hidden'])
+        self.time_pred_head.load_state_dict(params['time_pred_head'])

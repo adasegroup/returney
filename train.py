@@ -137,8 +137,7 @@ def main():
 
     model_class = RNNSM if args.model == 'rnnsm' else RMTPP
     model_cfg = cfg.rnnsm if args.model == 'rnnsm' else cfg.rmtpp
-    max_seq_len = cfg.rnnsm.max_seq_len if args.model == 'rnnsm' else \
-        cfg.rmtpp.max_seq_len
+
     train_loader, val_loader = get_ocon_train_val_loaders(
                                  cat_feat_name='event_type',
                                  num_feat_name='time_delta',
@@ -148,7 +147,7 @@ def main():
                                  prediction_end=prediction_end,
                                  path='data/OCON/train.csv',
                                  batch_size=cfg.training.batch_size,
-                                 max_seq_len=max_seq_len)
+                                 max_seq_len=model_cfg.max_seq_len)
 
     model = model_class(model_cfg).to(device)
     optimizer = optim.Adam(model.parameters(), lr=cfg.training.lr)

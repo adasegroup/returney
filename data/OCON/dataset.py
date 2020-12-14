@@ -12,12 +12,13 @@ class OconTrainDataset(Dataset):
         data = pd.read_csv(path)
         return data['id'].values
 
-    def __init__(self, data, cat_feat_name, num_feat_name, include_last_event=True, max_len=500):
+    def __init__(self, data, prediction_end, cat_feat_name, num_feat_name, include_last_event=True, max_len=500):
         super().__init__()
         self._ids = data['id'].to_numpy()
         self._times = data['time'].to_numpy()
         self._events = (data[cat_feat_name] + 1).to_numpy()
         self._time_deltas = data[num_feat_name].to_numpy()
+        self.prediction_end = prediction_end
         self.include_last_event = include_last_event
         self.max_len = max_len
         self._generate_sequences()
@@ -42,10 +43,8 @@ class OconTrainDataset(Dataset):
                         self._ids[cur_start] != self._ids[cur_end]:
                     returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1) + [False]))
                     if self.include_last_event:
-                        # append whatever number to align with other cases,
-                        # it won't be considered anyway
                         ts = np.concatenate([self._times[cur_start:cur_end],
-                                             np.zeros(1)])
+                                             np.ones(1) * self.prediction_end])
                         timestamps.append(torch.FloatTensor(ts))
                         cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end]))
                         num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end]))
@@ -208,7 +207,7 @@ def get_ocon_train_val_loaders(model,
     ids = data.id.unique()
     train_ids, val_ids = train_test_split(ids, train_size=train_ratio, random_state=seed)
     train, val = data[np.isin(data.id, train_ids)], data[np.isin(data.id, val_ids)]
-    train_ds = OconTrainDataset(train, cat_feat_name, num_feat_name, include_last_event=model == 'rnnsm',
+    train_ds = OconTrainDataset(train, prediction_end, cat_feat_name, num_feat_name, include_last_event=model == 'rnnsm',
                                 max_len=max_seq_len)
     train_loader = DataLoader(dataset=train_ds,
                               batch_size=batch_size,
