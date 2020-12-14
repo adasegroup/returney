@@ -1,7 +1,7 @@
 import sys
 sys.path.append('../data')
 
-from data.ATM.dataset import get_ATM_train_val_loaders
+from data.OCON.dataset import get_ocon_train_val_loaders
 import argparse
 import os
 from hydra.experimental import compose, initialize
@@ -14,9 +14,9 @@ import numpy as np
 
 from sklearn.metrics import roc_auc_score, recall_score
 
-activity_start = 16000
-prediction_start = 16400
-prediction_end = 16500
+activity_start = 1360
+prediction_start = 1370
+prediction_end = 1388
 
 
 def calc_rmse(predicted, target):
@@ -49,8 +49,8 @@ def validate(val_loader, model, prediction_start, prediction_end, device):
                 o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
                 preds = model.predict(o_j, timestamps, lengths, prediction_start)
             else:
-                o_j, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
-                preds = model.predict(o_j, timestamps, lengths)
+                o_j, deltas_pred, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
+                preds = model.predict(deltas_pred, o_j, timestamps, lengths)
             targets = targets.numpy()
 
             all_preds.extend(preds.tolist())
@@ -60,7 +60,7 @@ def validate(val_loader, model, prediction_start, prediction_end, device):
     all_targets = np.array(all_targets)
     return calc_rmse(all_preds, all_targets), \
         calc_recall(all_preds, all_targets, prediction_end), \
-        calc_auc(all_preds, all_targets, prediction_end)
+        #calc_auc(all_preds, all_targets, prediction_end)
 
 
 def train(train_loader, val_loader, model, optimizer, path, cfg, device):
@@ -75,13 +75,13 @@ def train(train_loader, val_loader, model, optimizer, path, cfg, device):
         model.train()
 
         for timestamps, cat_feats, num_feats, padding_mask, return_mask, lengths in train_loader:
-            time_deltas = timestamps[:, 1:] - timestamps[:, :-1]
+            deltas = timestamps[:, 1:] - timestamps[:, :-1]
             if is_rnnsm:
                 o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-                loss = model.compute_loss(time_deltas, padding_mask, return_mask, o_j)
+                loss = model.compute_loss(deltas, padding_mask, return_mask, o_j)
             else:
-                o_j, y_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-                loss = model.compute_loss(time_deltas, padding_mask, o_j, y_j, cat_feats)
+                o_j, deltas_pred, y_j = model(cat_feats.to(device), num_feats.to(device), lengths)
+                loss = model.compute_loss(deltas_pred, deltas, padding_mask, o_j, y_j, cat_feats)
 
             optimizer.zero_grad()
             loss.backward()
@@ -92,14 +92,14 @@ def train(train_loader, val_loader, model, optimizer, path, cfg, device):
         print("Loss:", train_metrics['loss'][-1])
 
         model.eval()
-        rmse, recall, auc = validate(val_loader,
+        rmse, recall = validate(val_loader,
             model,
             prediction_start,
             prediction_end,
             device)
         val_metrics['rmse'].append(rmse)
         val_metrics['recall'].append(recall)
-        val_metrics['auc'].append(auc)
+        val_metrics['auc'].append(0)
         print(f'Validation: '
               f'RMSE: {val_metrics["rmse"][-1]},\t'
               f'Recall: {val_metrics["recall"][-1]},\t'
@@ -139,11 +139,14 @@ def main():
     model_cfg = cfg.rnnsm if args.model == 'rnnsm' else cfg.rmtpp
     max_seq_len = cfg.rnnsm.max_seq_len if args.model == 'rnnsm' else \
         cfg.rmtpp.max_seq_len
-    train_loader, val_loader = get_ATM_train_val_loaders(model=args.model,
+    train_loader, val_loader = get_ocon_train_val_loaders(
+                                 cat_feat_name='event_type',
+                                 num_feat_name='time_delta',
+                                 model=args.model,
                                  activity_start=activity_start,
                                  prediction_start=prediction_start,
                                  prediction_end=prediction_end,
-                                 path='data/ATM/train_day.csv',
+                                 path='data/OCON/train.csv',
                                  batch_size=cfg.training.batch_size,
                                  max_seq_len=max_seq_len)
 

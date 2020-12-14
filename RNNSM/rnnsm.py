@@ -25,6 +25,7 @@ class RNNSM(nn.Module):
 
         self.integration_steps = cfg.integration_steps
 
+
     def forward(self, cat_feats, num_feats, lengths):
         x = torch.zeros((cat_feats.size(0), cat_feats.size(1), 0)).to(cat_feats.device)
         for i, emb in enumerate(self.embeddings):
