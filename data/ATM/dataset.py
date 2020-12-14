@@ -42,12 +42,17 @@ class ATMTrainDataset(Dataset):
                     self._ids[cur_start] != self._ids[cur_end]:
                     returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1) + [False]))
                     if self.include_last_event:
+                        # append whatever number to align with other cases,
+                        # it won't be considered anyway
                         ts = np.concatenate([self._times[cur_start:cur_end],
                                             np.zeros(1)])
                         timestamps.append(torch.FloatTensor(ts))
                         cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end]))
                         num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end]))
                     else:
+                        if cur_start == cur_end - 1:
+                            cur_start, cur_end = cur_end, cur_end + 1
+                            continue
                         timestamps.append(torch.FloatTensor(self._times[cur_start:cur_end]))
                         cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
                         num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end - 1]))
@@ -74,7 +79,7 @@ class ATMTrainDataset(Dataset):
         return len(self.timestamps)
 
 
-def pad_collate_train_rnnsm(batch):
+def pad_collate_train(batch):
     (timestamps, cat_feats, num_feats, return_mask) = zip(*batch)
     lens = np.array([len(seq) for seq in cat_feats])
     timestamps_padded = pad_sequence(timestamps, batch_first=True, padding_value=0)
@@ -89,14 +94,6 @@ def pad_collate_train_rnnsm(batch):
         padding_mask, \
         return_mask, \
         lens
-
-
-def pad_collate_train_rmtpp(batch):
-    # simply drop return mask
-    t, c, n, p, _, l = pad_collate_train_rnnsm(batch)
-
-    return t, c, n, p, l
-
 
 class ATMTestDataset(Dataset):
     def __init__(self,
@@ -201,18 +198,16 @@ def get_ATM_train_val_loaders(model,
     else:
         filename = path
 
-    assert(model in ['RMTPP', 'RNNSM'], 'Invalid model')
+    assert(model in ['rmtpp', 'rnnsm'], 'Invalid model')
     data = pd.read_csv(filename)
     ids = data.id.unique()
     train_ids, val_ids = train_test_split(ids, train_size=train_ratio, random_state=seed)
     train, val = data[np.isin(data.id, train_ids)], data[np.isin(data.id, val_ids)]
-    train_ds = ATMTrainDataset(train, max_len=max_seq_len)
-    collate_fn = pad_collate_train_rmtpp if model == 'RMTPP' \
-        else pad_collate_train_rnnsm
+    train_ds = ATMTrainDataset(train, include_last_event=model=='rnnsm', max_len=max_seq_len)
     train_loader = DataLoader(dataset=train_ds,
                               batch_size=batch_size,
                               shuffle=True,
-                              collate_fn=collate_fn,
+                              collate_fn=pad_collate_train,
                               drop_last=True)
 
     val_ds = ATMTestDataset(val, activity_start, prediction_start,
