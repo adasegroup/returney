@@ -98,7 +98,8 @@ class RNNSM(nn.Module):
         torch.save({'lstm': self.lstm.state_dict(),
                     'embeddings': self.embeddings.state_dict(),
                     'input_dense': self.input_dense.state_dict(),
-                    'output_dense': self.output_dense.state_dict()
+                    'output_dense': self.output_dense.state_dict(),
+                    'hidden': self.hidden.state_dict()
                     }, path)
 
 
@@ -108,3 +109,4 @@ class RNNSM(nn.Module):
         self.embeddings.load_state_dict(params['embeddings'])
         self.input_dense.load_state_dict(params['input_dense'])
         self.output_dense.load_state_dict(params['output_dense'])
+        self.hidden.load_state_dict(params['hidden'])

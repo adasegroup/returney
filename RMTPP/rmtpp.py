@@ -91,14 +91,16 @@ class RMTPP(nn.Module):
 
 
     def save_model(self, path):
-        torch.save({'rnn': self.rnn.state_dict(),
+        torch.save({'lstm': self.lstm.state_dict(),
                     'embeddings': self.embeddings.state_dict(),
-                    'output_dense': self.output_dense.state_dict()
+                    'output_dense': self.output_dense.state_dict(),
+                    'hidden': self.hidden.state_dict()
                     }, path)
 
 
     def load_model(self, path):
         params = torch.load(path)
-        self.rnn.load_state_dict(params['rnn'])
+        self.lstm.load_state_dict(params['lstm'])
         self.embeddings.load_state_dict(params['embeddings'])
         self.output_dense.load_state_dict(params['output_dense'])
+        self.hidden.load_state_dict(params['hidden'])
