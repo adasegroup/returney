@@ -25,7 +25,7 @@ def validate(val_loader, model, prediction_start, prediction_end, device):
                 preds = model.predict(o_j, timestamps, lengths)
             else:
                 o_j, deltas_pred, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
-                preds = model.predict(deltas_pred, o_j, timestamps, lengths)
+                preds = model.predict(deltas_pred, timestamps, lengths)
             targets = targets.numpy()
 
             all_preds.extend(preds.tolist())

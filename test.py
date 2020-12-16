@@ -23,10 +23,10 @@ def test(val_loader, model, prediction_start, prediction_end, device):
         for timestamps, cat_feats, num_feats, targets, lengths in val_loader:
             if is_rnnsm:
                 o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-                preds = model.predict(o_j, timestamps, lengths, prediction_start)
-            else:
-                o_j, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
                 preds = model.predict(o_j, timestamps, lengths)
+            else:
+                o_j, deltas_pred, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
+                preds = model.predict(deltas_pred, timestamps, lengths)
             targets = targets.numpy()
 
             all_preds.extend(preds.tolist())

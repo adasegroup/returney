@@ -69,27 +69,10 @@ class RMTPP(nn.Module):
         return (neg_ll + markers_loss + time_pred_loss * self.time_loss_weight) \
             / torch.sum(non_pad_mask)
 
-    def predict(self, deltas_pred, o_j, t_j, lengths):
+    def predict(self, deltas_pred, t_j, lengths):
         with torch.no_grad():
             batch_size = t_j.size(0)
             last_t_j = t_j[torch.arange(batch_size), lengths - 1]
-            last_o_j = o_j[torch.arange(batch_size), lengths - 1]
             last_deltas_pred = deltas_pred[torch.arange(batch_size), lengths - 1]
 
-            deltas = torch.arange(0, self.integration_end * self.time_scale, self.time_scale).to(o_j.device)
-            timestamps = deltas[None, :] + last_t_j[:, None] * self.time_scale
-
-            f_deltas = self._f_t(last_o_j, deltas, broadcast_deltas=True)
-
-            tf_deltas = timestamps * f_deltas
-            result = trapz(tf_deltas.cpu(), deltas[None, :].cpu()) / self.time_scale
-        return result
-
-    def _f_t(self, last_o_j, deltas, broadcast_deltas=False):
-        if broadcast_deltas:
-            lambda_t = torch.exp(last_o_j[:, None] + self.w * deltas[None, :])
-            f_t = torch.exp(torch.log(lambda_t) + torch.exp(last_o_j)[:, None] / self.w - lambda_t / self.w)
-        else:
-            lambda_t = torch.exp(last_o_j + self.w * deltas)
-            f_t = torch.exp(torch.log(lambda_t) + torch.exp(last_o_j) / self.w - lambda_t / self.w)
-        return f_t
+            return last_t_j + last_deltas_pred / self.time_scale

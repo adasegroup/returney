@@ -2,14 +2,14 @@ rmtpp:
   cat_sizes: [22]
   emb_dims: [20]
   marker_weights: [0.07]
-  time_loss_weight: 0.1
+  time_loss_weight: 0.01
   input_size: 21
   lstm_hidden_size: 32
   hidden_size: 16
   n_num_feats: 1
   w: 0.15
   w_trainable: False
-  time_scale: 0.01
+  time_scale: 1
   max_seq_len: 25
   dropout: 0.2
   integration_end: 1400
@@ -32,7 +32,7 @@ training:
   n_epochs: 30
   batch_size: 200
   model_path: model.pth
-  model: rnnsm
+  model: rmtpp
   validate_by: rmse
 testing:
   model_path: model.pth
