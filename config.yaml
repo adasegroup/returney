@@ -33,6 +33,7 @@ training:
   batch_size: 200
   model_path: model.pth
   model: rnnsm
+  validate_by: rmse
 testing:
   model_path: model.pth
   model: rnnsm

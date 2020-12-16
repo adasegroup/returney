@@ -38,11 +38,13 @@ def validate(val_loader, model, prediction_start, prediction_end, device):
         calc_auc(all_preds, all_targets, prediction_end)
 
 
-def train(train_loader, val_loader, model, optimizer, train_cfg, global_config, device):
+def train(train_loader, val_loader, model, optimizer, train_cfg, global_cfg, device):
     train_metrics = defaultdict(list)
     val_metrics = defaultdict(list)
 
     is_rnnsm = isinstance(model, RNNSM)
+
+    best_metric = 1e10 if train_cfg.validate_by == 'rmse' else -1
 
     for epoch in range(train_cfg.n_epochs):
         print(f'Epoch {epoch+1}/{train_cfg.n_epochs}....')
@@ -69,9 +71,17 @@ def train(train_loader, val_loader, model, optimizer, train_cfg, global_config, 
         model.eval()
         rmse, recall, auc = validate(val_loader,
             model,
-            global_config.prediction_start,
-            global_config.prediction_end,
+            global_cfg.prediction_start,
+            global_cfg.prediction_end,
             device)
+
+        if train_cfg.validate_by == 'rmse' and rmse < best_metric:
+            torch.save(model.state_dict(), train_cfg.model_path)
+        elif train_cfg.validate_by == 'recall' and recall > best_metric:
+            torch.save(model.state_dict(), train_cfg.model_path)
+        elif auc > best_metric:
+            torch.save(model.state_dict(), train_cfg.model_path)
+
         val_metrics['rmse'].append(rmse)
         val_metrics['recall'].append(recall)
         val_metrics['auc'].append(auc)
@@ -79,34 +89,36 @@ def train(train_loader, val_loader, model, optimizer, train_cfg, global_config, 
               f'RMSE: {val_metrics["rmse"][-1]},\t'
               f'Recall: {val_metrics["recall"][-1]},\t'
               f'AUC: {val_metrics["auc"][-1]} ')
-    torch.save(model.state_dict(), train_cfg.model_path)
-    return train_metrics
 
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    initialize(config_path=".")
-    config = compose(config_name="config.yaml")
+    initialize(cfg_path=".")
+    cfg = compose(cfg_name="cfg.yaml")
 
-    model = config.training.model
+    model = cfg.training.model
     assert(model in ['rnnsm', 'rmtpp'])
+    if model == 'rmtpp':
+        assert(cfg.training.validate_by == 'rmse')
+    else:
+        assert(cfg.training.validate_by in ['rmse', 'recall', 'auc'])
 
     model_class = RNNSM if model == 'rnnsm' else RMTPP
-    model_config = config.rnnsm if model == 'rnnsm' else config.rmtpp
+    model_cfg = cfg.rnnsm if model == 'rnnsm' else cfg.rmtpp
 
     train_loader, val_loader = get_ocon_train_val_loaders(
                                  cat_feat_name='event_type',
                                  num_feat_name='time_delta',
                                  model=model,
-                                 global_config=config.globals,
+                                 global_cfg=cfg.globals,
                                  path='data/OCON/train.csv',
-                                 batch_size=config.training.batch_size,
-                                 max_seq_len=model_config.max_seq_len)
+                                 batch_size=cfg.training.batch_size,
+                                 max_seq_len=model_cfg.max_seq_len)
 
-    model = model_class(model_config, config.globals).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=config.training.lr)
-    train(train_loader, val_loader, model, optimizer, config.training, config.globals, device)
+    model = model_class(model_cfg, cfg.globals).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=cfg.training.lr)
+    train(train_loader, val_loader, model, optimizer, cfg.training, cfg.globals, device)
 
 
 if __name__ == '__main__':

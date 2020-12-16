@@ -6,13 +6,13 @@ import numpy as np
 
 
 class RNNSM(nn.Module):
-    def __init__(self, cfg, global_config):
+    def __init__(self, cfg, global_cfg):
         super().__init__()
         hidden_size = cfg.hidden_size
         self.lstm = nn.LSTM(cfg.input_size, cfg.lstm_hidden_size, batch_first=True)
         cat_sizes = cfg.cat_sizes
         emb_dims = cfg.emb_dims
-        self.embeddings = nn.ModuleList([nn.Embedding(cat_size + 1, emb_dim, padding_idx=global_config.padding_id) \
+        self.embeddings = nn.ModuleList([nn.Embedding(cat_size + 1, emb_dim, padding_idx=global_cfg.padding_id) \
             for cat_size, emb_dim in zip(cat_sizes, emb_dims)])
 
         total_emb_length = sum(emb_dims)
@@ -77,19 +77,3 @@ class RNNSM(nn.Module):
         out = torch.exp(torch.exp(last_o_j) / self.w - \
                 torch.exp(last_o_j + self.w * deltas) / self.w)
         return out.squeeze()
-
-    def save_model(self, path):
-        torch.save({'lstm': self.lstm.state_dict(),
-                    'embeddings': self.embeddings.state_dict(),
-                    'input_dense': self.input_dense.state_dict(),
-                    'output_dense': self.output_dense.state_dict(),
-                    'hidden': self.hidden.state_dict()
-                    }, path)
-
-    def load_model(self, path):
-        params = torch.load(path)
-        self.lstm.load_state_dict(params['lstm'])
-        self.embeddings.load_state_dict(params['embeddings'])
-        self.input_dense.load_state_dict(params['input_dense'])
-        self.output_dense.load_state_dict(params['output_dense'])
-        self.hidden.load_state_dict(params['hidden'])

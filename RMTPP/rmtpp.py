@@ -6,14 +6,14 @@ from scipy.integrate import trapz
 
 
 class RMTPP(nn.Module):
-    def __init__(self, cfg, global_config):
+    def __init__(self, cfg, global_cfg):
         super().__init__()
         self.lstm = nn.LSTM(cfg.input_size, cfg.lstm_hidden_size, batch_first=True)
         self.n_num_feats = cfg.n_num_feats
 
         cat_sizes = cfg.cat_sizes
         emb_dims = cfg.emb_dims
-        self.embeddings = nn.ModuleList([nn.Embedding(cat_size + 1, emb_dim, padding_idx=global_config.padding_id) for cat_size, emb_dim
+        self.embeddings = nn.ModuleList([nn.Embedding(cat_size + 1, emb_dim, padding_idx=global_cfg.padding_id) for cat_size, emb_dim
                                          in zip(cat_sizes, emb_dims)])
 
         self.hidden = nn.Linear(cfg.lstm_hidden_size, cfg.hidden_size)
@@ -93,19 +93,3 @@ class RMTPP(nn.Module):
             lambda_t = torch.exp(last_o_j + self.w * deltas)
             f_t = torch.exp(torch.log(lambda_t) + torch.exp(last_o_j) / self.w - lambda_t / self.w)
         return f_t
-
-    def save_model(self, path):
-        torch.save({'lstm': self.lstm.state_dict(),
-                    'embeddings': self.embeddings.state_dict(),
-                    'output_dense': self.output_dense.state_dict(),
-                    'hidden': self.hidden.state_dict(),
-                    'time_pred_head': self.time_pred_head.state_dict()
-                    }, path)
-
-    def load_model(self, path):
-        params = torch.load(path)
-        self.lstm.load_state_dict(params['lstm'])
-        self.embeddings.load_state_dict(params['embeddings'])
-        self.output_dense.load_state_dict(params['output_dense'])
-        self.hidden.load_state_dict(params['hidden'])
-        self.time_pred_head.load_state_dict(params['time_pred_head'])
