@@ -18,12 +18,14 @@ class RNNSM(nn.Module):
         self.input_dense = nn.Linear(total_emb_length + cfg.n_num_feats, cfg.input_size)
         self.dropout = nn.Dropout(cfg.dropout)
         self.output_dense = nn.Linear(cfg.hidden_size, 1, bias=False)
-
         self.hidden = nn.Linear(cfg.lstm_hidden_size, cfg.hidden_size)
 
-        self.w = cfg.w
+        if cfg.w_trainable:
+            self.w = nn.Parameter(torch.FloatTensor([-0.5]))
+        else:
+            self.w = cfg.w
         self.time_scale = cfg.time_scale
-        self.integration_points = cfg.integration_points
+        self.integration_end = cfg.integration_end
 
 
     def forward(self, cat_feats, num_feats, lengths):
@@ -49,16 +51,6 @@ class RNNSM(nn.Module):
         return common_term + ret_term
 
 
-    def predict_standard(self, o_j, t_j, lengths):
-        with torch.no_grad():
-            last_o_j = o_j[torch.arange(o_j.size(0)), lengths - 1]
-            last_t_j = t_j[torch.arange(t_j.size(0)), lengths - 1]
-            deltas = torch.arange(0, self.integration_points * self.time_scale, self.time_scale).to(o_j.device)
-
-            s_deltas = self._s_t(last_o_j, deltas, broadcast_deltas=True)
-        return last_t_j.cpu().numpy() + trapz(s_deltas.cpu(), deltas_scaled.cpu()) / self.time_scale
-
-
     def predict(self, o_j, t_j, lengths, pred_start):
         with torch.no_grad():
             batch_size = o_j.size(0)
@@ -66,17 +58,15 @@ class RNNSM(nn.Module):
             last_t_j = t_j[torch.arange(batch_size), lengths - 1]
 
             t_til_start = (pred_start - last_t_j) * self.time_scale
-
             s_t_s = self._s_t(last_o_j, t_til_start)
-
-            zeros = torch.zeros(last_t_j.size()).to(last_t_j.device)
-            deltas = torch.arange(0, self.integration_points * self.time_scale, self.time_scale).to(o_j.device)
-            s_deltas = self._s_t(last_o_j, deltas, broadcast_deltas=True)
 
             preds = np.zeros(batch_size)
             for i in range(batch_size):
                 ith_t_s, ith_s_t_s = t_til_start[i], s_t_s[i]
-                ith_s_deltas = s_deltas[i]
+                deltas = torch.arange(0,
+                    (self.integration_end - last_t_j[i]) * self.time_scale, \
+                    self.time_scale).to(o_j.device)
+                ith_s_deltas = self._s_t(last_o_j[i], deltas[None, :])
                 pred_delta = trapz(ith_s_deltas[deltas < ith_t_s].cpu(), deltas[deltas < ith_t_s].cpu())
                 pred_delta += trapz(ith_s_deltas[deltas >= ith_t_s].cpu(), deltas[deltas >= ith_t_s].cpu()) / ith_s_t_s.item()
                 preds[i] = last_t_j[i].cpu().numpy() + pred_delta / self.time_scale
@@ -84,13 +74,9 @@ class RNNSM(nn.Module):
         return preds
 
 
-    def _s_t(self, last_o_j, deltas, broadcast_deltas=False):
-        if broadcast_deltas:
-            out = torch.exp(torch.exp(last_o_j)[:, None] / self.w - \
-                    torch.exp(last_o_j[:, None] + self.w * deltas[None, :]) / self.w)
-        else:
-            out = torch.exp(torch.exp(last_o_j) / self.w - \
-                    torch.exp(last_o_j + self.w * deltas) / self.w)
+    def _s_t(self, last_o_j, deltas):
+        out = torch.exp(torch.exp(last_o_j) / self.w - \
+                torch.exp(last_o_j + self.w * deltas) / self.w)
         return out.squeeze()
 
 

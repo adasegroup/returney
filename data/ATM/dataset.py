@@ -30,7 +30,6 @@ class ATMTrainDataset(Dataset):
         returned = []
         cur_start, cur_end = 0, 1
 
-        # нарезка датасета по последовательностям с одним id и максимальной длиной self.max_len
         while cur_start < len(self._ids):
             if cur_end < len(self._ids) and \
                     self._ids[cur_start] == self._ids[cur_end] and \

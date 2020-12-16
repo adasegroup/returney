@@ -26,9 +26,12 @@ class RMTPP(nn.Module):
         self.output_dense = nn.Linear(cfg.hidden_size, 1)
         self.time_pred_head = nn.Linear(cfg.hidden_size, 1, bias=False)
 
-        self.w = cfg.w
+        if cfg.w_trainable:
+            self.w = nn.Parameter(torch.FloatTensor([0.1]))
+        else:
+            self.w = cfg.w
         self.time_scale = cfg.time_scale
-        self.integration_points = cfg.integration_points
+        self.integration_end = cfg.integration_end
 
     def forward(self, cat_feats, num_feats, lengths):
         x = torch.zeros(*cat_feats.size()[:2], 0).to(cat_feats.device)
@@ -78,7 +81,7 @@ class RMTPP(nn.Module):
             last_o_j = o_j[torch.arange(batch_size), lengths - 1]
             last_deltas_pred = deltas_pred[torch.arange(batch_size), lengths - 1]
 
-            deltas = torch.arange(0, self.integration_points * self.time_scale, self.time_scale).to(o_j.device)
+            deltas = torch.arange(0, self.integration_end * self.time_scale, self.time_scale).to(o_j.device)
             timestamps = deltas[None, :] + last_t_j[:, None] * self.time_scale
 
             f_deltas = self._f_t(last_o_j, deltas, broadcast_deltas=True)

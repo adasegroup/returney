@@ -124,7 +124,6 @@ class OconTestDataset(Dataset):
         targets = []
         cur_start, cur_end = 0, 1
 
-        # нарезка датасета по последовательностям с одним id и максимальной длиной self.max_len
         while cur_start < len(self._ids) - 1:
             if cur_end < len(self._ids) - 1 and \
                     self._ids[cur_start] == self._ids[cur_end] and \
@@ -202,7 +201,7 @@ def get_ocon_train_val_loaders(model,
     else:
         filename = path
 
-    assert (model in ['rmtpp', 'rnnsm'], 'Invalid model')
+    assert (model in ['rmtpp', 'rnnsm'])
     data = pd.read_csv(filename)
     ids = data.id.unique()
     train_ids, val_ids = train_test_split(ids, train_size=train_ratio, random_state=seed)
