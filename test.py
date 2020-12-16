@@ -13,21 +13,37 @@ import numpy as np
 from utils import calc_auc, calc_rmse, calc_recall
 
 
+def rnnsm_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
+    o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
+    preds = model.predict(o_j, timestamps, lengths)
+    return preds
+
+
+def rmtpp_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
+    o_j, deltas_pred, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
+    preds = model.predict(deltas_pred, timestamps, lengths)
+    return preds
+
+
+def grobformer_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
+    o_j = model(cat_feats.to(device), timestamps.to(device), lengths)
+    preds = model.predict(o_j, timestamps, lengths)
+    return preds
+
+
 def test(val_loader, model, prediction_start, prediction_end, device):
     all_preds = []
     all_targets = []
 
-    is_rnnsm = isinstance(model, RNNSM)
+    model2test_step = {RNNSM: rnnsm_test_step, RMTPP: rmtpp_test_step, \
+                        Grobformer: grobformer_test_step}
+    test_step = model2test_step[type(model)]
 
     model.eval()
     with torch.no_grad():
         for timestamps, cat_feats, num_feats, targets, lengths in val_loader:
-            if is_rnnsm:
-                o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-                preds = model.predict(o_j, timestamps, lengths)
-            else:
-                o_j, deltas_pred, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
-                preds = model.predict(deltas_pred, timestamps, lengths)
+            preds = test_step(model, device, *batch)
+            targets = batch[-2]
             targets = targets.numpy()
 
             all_preds.extend(preds.tolist())
