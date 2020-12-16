@@ -21,12 +21,12 @@ class RNNSM(nn.Module):
         self.hidden = nn.Linear(cfg.lstm_hidden_size, cfg.hidden_size)
 
         if cfg.w_trainable:
-            self.w = nn.Parameter(torch.FloatTensor([-0.5]))
+            self.w = nn.Parameter(torch.FloatTensor([0.1]))
         else:
             self.w = cfg.w
         self.time_scale = cfg.time_scale
+        self.prediction_start = cfg.prediction_start
         self.integration_end = cfg.integration_end
-
 
     def forward(self, cat_feats, num_feats, lengths):
         x = torch.zeros((cat_feats.size(0), cat_feats.size(1), 0)).to(cat_feats.device)
@@ -41,44 +41,41 @@ class RNNSM(nn.Module):
         o_j = self.output_dense(h_j).squeeze()
         return o_j
 
-
-    def compute_loss(self, deltas, padding_mask, ret_mask, o_j):
+    def compute_loss(self, deltas, non_pad_mask, ret_mask, o_j):
         deltas_scaled = deltas * self.time_scale
         p = o_j + self.w * deltas_scaled
-        common_term = -(torch.exp(o_j) - torch.exp(p)) / self.w * ~padding_mask
-        common_term = common_term.sum() / (~padding_mask).sum()
+        common_term = -(torch.exp(o_j) - torch.exp(p)) / self.w * non_pad_mask
+        common_term = common_term.sum() / (non_pad_mask).sum()
         ret_term = (-p * ret_mask).sum() / ret_mask.sum()
         return common_term + ret_term
 
-
-    def predict(self, o_j, t_j, lengths, pred_start):
+    def predict(self, o_j, t_j, lengths):
         with torch.no_grad():
             batch_size = o_j.size(0)
             last_o_j = o_j[torch.arange(batch_size), lengths - 1]
             last_t_j = t_j[torch.arange(batch_size), lengths - 1]
 
-            t_til_start = (pred_start - last_t_j) * self.time_scale
+            t_til_start = (self.prediction_start - last_t_j) * self.time_scale
             s_t_s = self._s_t(last_o_j, t_til_start)
 
             preds = np.zeros(batch_size)
             for i in range(batch_size):
                 ith_t_s, ith_s_t_s = t_til_start[i], s_t_s[i]
                 deltas = torch.arange(0,
-                    (self.integration_end - last_t_j[i]) * self.time_scale, \
+                    (self.integration_end - last_t_j[i]) * self.time_scale,
                     self.time_scale).to(o_j.device)
                 ith_s_deltas = self._s_t(last_o_j[i], deltas[None, :])
-                pred_delta = trapz(ith_s_deltas[deltas < ith_t_s].cpu(), deltas[deltas < ith_t_s].cpu())
-                pred_delta += trapz(ith_s_deltas[deltas >= ith_t_s].cpu(), deltas[deltas >= ith_t_s].cpu()) / ith_s_t_s.item()
+                pred_delta = trapz(ith_s_deltas[deltas < ith_t_s].cpu(),
+                    deltas[deltas < ith_t_s].cpu())
+                pred_delta += trapz(ith_s_deltas[deltas >= ith_t_s].cpu(),
+                    deltas[deltas >= ith_t_s].cpu()) / ith_s_t_s.item()
                 preds[i] = last_t_j[i].cpu().numpy() + pred_delta / self.time_scale
-
         return preds
-
 
     def _s_t(self, last_o_j, deltas):
         out = torch.exp(torch.exp(last_o_j) / self.w - \
                 torch.exp(last_o_j + self.w * deltas) / self.w)
         return out.squeeze()
-
 
     def save_model(self, path):
         torch.save({'lstm': self.lstm.state_dict(),
@@ -87,7 +84,6 @@ class RNNSM(nn.Module):
                     'output_dense': self.output_dense.state_dict(),
                     'hidden': self.hidden.state_dict()
                     }, path)
-
 
     def load_model(self, path):
         params = torch.load(path)

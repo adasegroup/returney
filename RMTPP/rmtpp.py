@@ -52,11 +52,10 @@ class RMTPP(nn.Module):
 
         return o_j, deltas_pred, ys_j
 
-
-    def compute_loss(self, deltas_pred, deltas, padding_mask, o_j, ys_j, ys_true):
+    def compute_loss(self, deltas_pred, deltas, non_pad_mask, o_j, ys_j, ys_true):
         deltas_scaled = deltas * self.time_scale
         p = o_j + self.w * deltas_scaled
-        ll = (p + (torch.exp(o_j) - torch.exp(p)) / self.w) * ~padding_mask
+        ll = (p + (torch.exp(o_j) - torch.exp(p)) / self.w) * non_pad_mask
         neg_ll = -ll.sum()
         markers_loss = 0
         for i, (w, y_j) in enumerate(zip(self.marker_weights, ys_j)):
@@ -68,13 +67,9 @@ class RMTPP(nn.Module):
                 reduction='sum')
         time_pred_loss = ((deltas_scaled - deltas_pred) ** 2).sum()
         return (neg_ll + markers_loss + time_pred_loss * self.time_loss_weight) \
-            / torch.sum(~padding_mask)
-
+            / torch.sum(non_pad_mask)
 
     def predict(self, deltas_pred, o_j, t_j, lengths):
-        """
-        Predicts the timing of the next event
-        """
         with torch.no_grad():
             batch_size = t_j.size(0)
             last_t_j = t_j[torch.arange(batch_size), lengths - 1]
@@ -87,10 +82,8 @@ class RMTPP(nn.Module):
             f_deltas = self._f_t(last_o_j, deltas, broadcast_deltas=True)
 
             tf_deltas = timestamps * f_deltas
-            print(trapz(tf_deltas.cpu(), deltas[None, :].cpu()) / self.time_scale - last_t_j.cpu().numpy())
             result = trapz(tf_deltas.cpu(), deltas[None, :].cpu()) / self.time_scale
         return result
-
 
     def _f_t(self, last_o_j, deltas, broadcast_deltas=False):
         if broadcast_deltas:
@@ -101,7 +94,6 @@ class RMTPP(nn.Module):
             f_t = torch.exp(torch.log(lambda_t) + torch.exp(last_o_j) / self.w - lambda_t / self.w)
         return f_t
 
-
     def save_model(self, path):
         torch.save({'lstm': self.lstm.state_dict(),
                     'embeddings': self.embeddings.state_dict(),
@@ -109,7 +101,6 @@ class RMTPP(nn.Module):
                     'hidden': self.hidden.state_dict(),
                     'time_pred_head': self.time_pred_head.state_dict()
                     }, path)
-
 
     def load_model(self, path):
         params = torch.load(path)

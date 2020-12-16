@@ -65,44 +65,25 @@ def validate(val_loader, model, prediction_start, prediction_end, device):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--model',
-                        type=str,
-                        default='rmtpp',
-                        help='Name of the model to train. Either "rmtpp" or "rnnsm"')
-
-    parser.add_argument('-d', '--dataset',
-                        type=str,
-                        default='ATM',
-                        help='Dataset to use. Allowed values: ["ATM"]')
-
-    parser.add_argument('-p', '--model_path',
-                        type=str,
-                        default='./model.pth',
-                        help='Path where to save the model.')
-
-    args = parser.parse_args()
-    assert (args.model in ['rnnsm', 'rmtpp'], 'Invalid model name')
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     initialize(config_path=".")
     cfg = compose(config_name="config.yaml")
 
-    model_class = RNNSM if args.model == 'rnnsm' else RMTPP
-    max_seq_len = cfg.rnnsm.max_seq_len if args.model == 'rnnsm' else \
+    model = cfg.testing.model
+    assert (model in ['rnnsm', 'rmtpp'])
+
+    model_class = RNNSM if model == 'rnnsm' else RMTPP
+    max_seq_len = cfg.rnnsm.max_seq_len if model == 'rnnsm' else \
         cfg.rmtpp.max_seq_len
     test_loader = get_ocon_test_loader(cat_feat_name='event_type',
                                        num_feat_name='time_delta',
-                                       activity_start=activity_start,
-                                       prediction_start=prediction_start,
-                                       prediction_end=prediction_end,
+                                       global_config=cfg.globals,
                                        path='data/OCON/train.csv',
                                        batch_size=cfg.training.batch_size,
                                        max_seq_len=max_seq_len)
 
-    model = model_class.load_model(args.model_path)
+    model = model_class.load_model(cfg.testing.model_path)
     validate(test_loader, model, prediction_start, prediction_end, device)
 
 

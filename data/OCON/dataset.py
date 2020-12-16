@@ -56,6 +56,8 @@ class OconTrainDataset(Dataset):
                         cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
                         num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end - 1]))
                 else:
+                    cur_start, cur_end = cur_end, cur_end + 1
+                    continue
                     returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1)))
                     timestamps.append(torch.FloatTensor(self._times[cur_start:cur_end]))
                     cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
@@ -85,12 +87,12 @@ def pad_collate_train(batch):
     cat_feats_padded = pad_sequence(cat_feats, batch_first=True, padding_value=0)
     num_feats_padded = pad_sequence(num_feats, batch_first=True, padding_value=0)
     return_mask = pad_sequence(return_mask, batch_first=True, padding_value=0)
-    padding_mask = (cat_feats_padded == 0).squeeze()
+    non_pad_mask = cat_feats_padded.ne(0).squeeze()
 
     return timestamps_padded, \
            cat_feats_padded, \
            num_feats_padded, \
-           padding_mask, \
+           non_pad_mask, \
            return_mask, \
            lens
 
@@ -188,9 +190,7 @@ def pad_collate_test(batch):
 def get_ocon_train_val_loaders(model,
                                cat_feat_name,
                                num_feat_name,
-                               activity_start,
-                               prediction_start,
-                               prediction_end,
+                               global_config,
                                path=None,
                                batch_size=32,
                                max_seq_len=500,
@@ -202,6 +202,11 @@ def get_ocon_train_val_loaders(model,
         filename = path
 
     assert (model in ['rmtpp', 'rnnsm'])
+
+    activity_start = global_config.activity_start
+    prediction_start = global_config.prediction_start
+    prediction_end = global_config.prediction_end
+
     data = pd.read_csv(filename)
     ids = data.id.unique()
     train_ids, val_ids = train_test_split(ids, train_size=train_ratio, random_state=seed)
@@ -227,9 +232,7 @@ def get_ocon_train_val_loaders(model,
 
 def get_ocon_test_loader(cat_feat_name,
                          num_feat_name,
-                         activity_start,
-                         prediction_start,
-                         prediction_end,
+                         global_config,
                          path=None,
                          batch_size=32,
                          max_seq_len=500):
@@ -237,6 +240,10 @@ def get_ocon_test_loader(cat_feat_name,
         filename = 'data/OCON/train.csv'
     else:
         filename = path
+
+    activity_start = global_config.activity_start
+    prediction_start = global_config.prediction_start
+    prediction_end = global_config.prediction_end
 
     csv = pd.read_csv(filename)
     ids = csv.id.unique()
