@@ -250,7 +250,6 @@ def get_ocon_test_loader(cat_feat_name,
     prediction_end = global_cfg.prediction_end
 
     csv = pd.read_csv(filename)
-    ids = csv.id.unique()
 
     test_ds = OconTestDataset(ids, cat_feat_name, num_feat_name, global_cfg,
                               prediction_end)

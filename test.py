@@ -12,12 +12,13 @@ import numpy as np
 from utils import calc_auc, calc_rmse, calc_recall
 
 
-def validate(val_loader, model, prediction_start, prediction_end, device):
+def test(val_loader, model, prediction_start, prediction_end, device):
     all_preds = []
     all_targets = []
 
     is_rnnsm = isinstance(model, RNNSM)
 
+    model.eval()
     with torch.no_grad():
         for timestamps, cat_feats, num_feats, targets, lengths in val_loader:
             if is_rnnsm:
@@ -59,7 +60,7 @@ def main():
 
     model = model_class(model_cfg, cfg.globals)
     model.load_state_dict(cfg.testing.model_path)
-    validate(test_loader, model, prediction_start, prediction_end, device)
+    test(test_loader, model, prediction_start, prediction_end, device)
 
 
 if __name__ == '__main__':
