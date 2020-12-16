@@ -87,26 +87,26 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     initialize(config_path=".")
-    cfg = compose(config_name="config.yaml")
+    config = compose(config_name="config.yaml")
 
-    model = cfg.training.model
+    model = config.training.model
     assert(model in ['rnnsm', 'rmtpp'])
 
     model_class = RNNSM if model == 'rnnsm' else RMTPP
-    model_cfg = cfg.rnnsm if model == 'rnnsm' else cfg.rmtpp
+    model_config = config.rnnsm if model == 'rnnsm' else config.rmtpp
 
     train_loader, val_loader = get_ocon_train_val_loaders(
                                  cat_feat_name='event_type',
                                  num_feat_name='time_delta',
                                  model=model,
-                                 global_config=cfg.globals,
+                                 global_config=config.globals,
                                  path='data/OCON/train.csv',
-                                 batch_size=cfg.training.batch_size,
-                                 max_seq_len=model_cfg.max_seq_len)
+                                 batch_size=config.training.batch_size,
+                                 max_seq_len=model_config.max_seq_len)
 
-    model = model_class(model_cfg).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=cfg.training.lr)
-    train(train_loader, val_loader, model, optimizer, cfg.training, cfg.globals, device)
+    model = model_class(model_config, config.globals).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=config.training.lr)
+    train(train_loader, val_loader, model, optimizer, config.training, config.globals, device)
 
 
 if __name__ == '__main__':

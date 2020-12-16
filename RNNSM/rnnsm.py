@@ -6,13 +6,14 @@ import numpy as np
 
 
 class RNNSM(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, global_config):
         super().__init__()
         hidden_size = cfg.hidden_size
         self.lstm = nn.LSTM(cfg.input_size, cfg.lstm_hidden_size, batch_first=True)
         cat_sizes = cfg.cat_sizes
         emb_dims = cfg.emb_dims
-        self.embeddings = nn.ModuleList([nn.Embedding(cat_size + 1, emb_dim, padding_idx=0) for cat_size, emb_dim in zip(cat_sizes, emb_dims)])
+        self.embeddings = nn.ModuleList([nn.Embedding(cat_size + 1, emb_dim, padding_idx=global_config.padding_id) \
+            for cat_size, emb_dim in zip(cat_sizes, emb_dims)])
 
         total_emb_length = sum(emb_dims)
         self.input_dense = nn.Linear(total_emb_length + cfg.n_num_feats, cfg.input_size)

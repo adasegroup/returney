@@ -42,22 +42,22 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     initialize(config_path=".")
-    cfg = compose(config_name="config.yaml")
+    config = compose(config_name="config.yaml")
 
-    model = cfg.testing.model
+    model = config.testing.model
     assert (model in ['rnnsm', 'rmtpp'])
 
     model_class = RNNSM if model == 'rnnsm' else RMTPP
-    max_seq_len = cfg.rnnsm.max_seq_len if model == 'rnnsm' else \
-        cfg.rmtpp.max_seq_len
+    max_seq_len = config.rnnsm.max_seq_len if model == 'rnnsm' else \
+        config.rmtpp.max_seq_len
     test_loader = get_ocon_test_loader(cat_feat_name='event_type',
                                        num_feat_name='time_delta',
-                                       global_config=cfg.globals,
+                                       global_config=config.globals,
                                        path='data/OCON/train.csv',
-                                       batch_size=cfg.training.batch_size,
+                                       batch_size=config.training.batch_size,
                                        max_seq_len=max_seq_len)
 
-    model = model_class.load_model(cfg.testing.model_path)
+    model = model_class(model_config, config.globals).load_model(config.testing.model_path)
     validate(test_loader, model, prediction_start, prediction_end, device)
 
 
