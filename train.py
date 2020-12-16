@@ -94,8 +94,8 @@ def train(train_loader, val_loader, model, optimizer, train_cfg, global_cfg, dev
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    initialize(cfg_path=".")
-    cfg = compose(cfg_name="cfg.yaml")
+    initialize(config_path=".")
+    cfg = compose(config_name="config.yaml")
 
     model = cfg.training.model
     assert(model in ['rnnsm', 'rmtpp'])

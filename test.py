@@ -41,8 +41,8 @@ def validate(val_loader, model, prediction_start, prediction_end, device):
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    initialize(cfg_path=".")
-    cfg = compose(cfg_name="cfg.yaml")
+    initialize(config_path=".")
+    cfg = compose(config_name="config.yaml")
 
     model = cfg.testing.model
     assert (model in ['rnnsm', 'rmtpp'])

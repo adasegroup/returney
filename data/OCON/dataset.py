@@ -12,7 +12,7 @@ class OconTrainDataset(Dataset):
                  data,
                  cat_feat_name,
                  num_feat_name,
-                 global_config,
+                 global_cfg,
                  include_last_event=True,
                  max_seq_len=500):
         super().__init__()
@@ -20,9 +20,9 @@ class OconTrainDataset(Dataset):
         self._times = data['time'].to_numpy()
         self._events = (data[cat_feat_name] + 1).to_numpy()
         self._time_deltas = data[num_feat_name].to_numpy()
-        self.prediction_end = global_config.prediction_end
+        self.prediction_end = global_cfg.prediction_end
         self.include_last_event = include_last_event
-        self.padding_id = global_config.padding_id
+        self.padding_id = global_cfg.padding_id
 
         self.max_seq_len = max_seq_len
         self._generate_sequences()
@@ -103,13 +103,13 @@ class OconTestDataset(Dataset):
                  data,
                  cat_feat_name,
                  num_feat_name,
-                 global_config,
+                 global_cfg,
                  max_seq_len=500):
         super().__init__()
         self.max_seq_len = max_seq_len
-        self.prediction_start = global_config.prediction_start
-        self.prediction_end = global_config.prediction_end
-        self.activity_start = global_config.activity_start
+        self.prediction_start = global_cfg.prediction_start
+        self.prediction_end = global_cfg.prediction_end
+        self.activity_start = global_cfg.activity_start
 
         has_event_in_activity = lambda x: ((x['time'] < self.prediction_start) &
                                            (x['time'] > self.activity_start)).any()
@@ -191,7 +191,7 @@ def pad_collate_test(batch):
 def get_ocon_train_val_loaders(model,
                                cat_feat_name,
                                num_feat_name,
-                               global_config,
+                               global_cfg,
                                path=None,
                                batch_size=32,
                                max_seq_len=500,
@@ -204,9 +204,9 @@ def get_ocon_train_val_loaders(model,
 
     assert (model in ['rmtpp', 'rnnsm'])
 
-    activity_start = global_config.activity_start
-    prediction_start = global_config.prediction_start
-    prediction_end = global_config.prediction_end
+    activity_start = global_cfg.activity_start
+    prediction_start = global_cfg.prediction_start
+    prediction_end = global_cfg.prediction_end
 
     data = pd.read_csv(filename)
     ids = data.id.unique()
@@ -215,16 +215,16 @@ def get_ocon_train_val_loaders(model,
     train_ds = OconTrainDataset(train,
                                 cat_feat_name,
                                 num_feat_name,
-                                global_config,
+                                global_cfg,
                                 include_last_event=model == 'rnnsm',
                                 max_seq_len=max_seq_len)
     train_loader = DataLoader(dataset=train_ds,
                               batch_size=batch_size,
                               shuffle=True,
-                              collate_fn=lambda x: pad_collate_train(x, global_config.padding_id),
+                              collate_fn=lambda x: pad_collate_train(x, global_cfg.padding_id),
                               drop_last=True)
 
-    val_ds = OconTestDataset(val, cat_feat_name, num_feat_name, global_config)
+    val_ds = OconTestDataset(val, cat_feat_name, num_feat_name, global_cfg)
     val_loader = DataLoader(dataset=val_ds,
                             batch_size=batch_size,
                             shuffle=False,
@@ -236,7 +236,7 @@ def get_ocon_train_val_loaders(model,
 
 def get_ocon_test_loader(cat_feat_name,
                          num_feat_name,
-                         global_config,
+                         global_cfg,
                          path=None,
                          batch_size=32,
                          max_seq_len=500):
@@ -245,14 +245,14 @@ def get_ocon_test_loader(cat_feat_name,
     else:
         filename = path
 
-    activity_start = global_config.activity_start
-    prediction_start = global_config.prediction_start
-    prediction_end = global_config.prediction_end
+    activity_start = global_cfg.activity_start
+    prediction_start = global_cfg.prediction_start
+    prediction_end = global_cfg.prediction_end
 
     csv = pd.read_csv(filename)
     ids = csv.id.unique()
 
-    test_ds = OconTestDataset(ids, cat_feat_name, num_feat_name, global_config,
+    test_ds = OconTestDataset(ids, cat_feat_name, num_feat_name, global_cfg,
                               prediction_end)
     test_loader = DataLoader(dataset=test_ds,
                              batch_size=batch_size,
