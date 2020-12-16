@@ -25,6 +25,7 @@ class RNNSM(nn.Module):
             self.w = nn.Parameter(torch.FloatTensor([0.1]))
         else:
             self.w = cfg.w
+
         self.time_scale = cfg.time_scale
         self.prediction_start = cfg.prediction_start
         self.integration_end = cfg.integration_end
@@ -71,6 +72,7 @@ class RNNSM(nn.Module):
                 pred_delta += trapz(ith_s_deltas[deltas >= ith_t_s].cpu(),
                     deltas[deltas >= ith_t_s].cpu()) / ith_s_t_s.item()
                 preds[i] = last_t_j[i].cpu().numpy() + pred_delta / self.time_scale
+
         return preds
 
     def _s_t(self, last_o_j, deltas):

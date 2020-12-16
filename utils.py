@@ -15,7 +15,7 @@ def calc_recall(predicted, target, prediction_end):
 
 
 def calc_auc(predicted, target, prediction_end):
-    y_pred = predicted > prediction_end
+    y_pred = predicted
     y_true = target == -1
     try:
         return roc_auc_score(y_true, y_pred)

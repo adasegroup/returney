@@ -5,6 +5,7 @@ from data.OCON.dataset import get_ocon_train_val_loaders
 from hydra.experimental import compose, initialize
 from RNNSM.rnnsm import RNNSM
 from RMTPP.rmtpp import RMTPP
+from grobformer.grobformer import Grobformer
 from torch import optim
 from collections import defaultdict
 import torch
@@ -12,20 +13,36 @@ import numpy as np
 from utils import calc_rmse, calc_auc, calc_recall
 
 
+def rnnsm_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
+    o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
+    preds = model.predict(o_j, timestamps, lengths)
+    return preds
+
+
+def rmtpp_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
+    o_j, deltas_pred, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
+    preds = model.predict(deltas_pred, timestamps, lengths)
+    return preds
+
+
+def grobformer_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
+    o_j = model(cat_feats.to(device), timestamps.to(device), lengths)
+    preds = model.predict(o_j, timestamps, lengths)
+    return preds
+
+
 def validate(val_loader, model, prediction_start, prediction_end, device):
     all_preds = []
     all_targets = []
 
-    is_rnnsm = isinstance(model, RNNSM)
+    model2test_step = {RNNSM: rnnsm_test_step, RMTPP: rmtpp_test_step, \
+                        Grobformer: grobformer_test_step}
+    test_step = model2test_step[type(model)]
 
     with torch.no_grad():
-        for timestamps, cat_feats, num_feats, targets, lengths in val_loader:
-            if is_rnnsm:
-                o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-                preds = model.predict(o_j, timestamps, lengths)
-            else:
-                o_j, deltas_pred, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
-                preds = model.predict(deltas_pred, timestamps, lengths)
+        for batch in val_loader:
+            preds = test_step(model, device, *batch)
+            targets = batch[-2]
             targets = targets.numpy()
 
             all_preds.extend(preds.tolist())
@@ -38,11 +55,34 @@ def validate(val_loader, model, prediction_start, prediction_end, device):
         calc_auc(all_preds, all_targets, prediction_end)
 
 
+def rnnsm_train_step(model, device, timestamps, cat_feats, num_feats, non_pad_mask, return_mask, lengths):
+    deltas = timestamps[:, 1:] - timestamps[:, :-1]
+    o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
+    loss = model.compute_loss(deltas, non_pad_mask, return_mask, o_j)
+    return loss
+
+
+def rmtpp_train_step(model, device, timestamps, cat_feats, num_feats, non_pad_mask, return_mask, lengths):
+    deltas = timestamps[:, 1:] - timestamps[:, :-1]
+    o_j, deltas_pred, y_j = model(cat_feats.to(device), num_feats.to(device), lengths)
+    loss = model.compute_loss(deltas_pred, deltas, non_pad_mask, o_j, y_j, cat_feats)
+    return loss
+
+
+def grobformer_train_step(model, device, timestamps, cat_feats, num_feats, non_pad_mask, return_mask, lengths):
+    deltas = timestamps[:, 1:] - timestamps[:, :-1]
+    o_j = model(cat_feats.to(device), timestamps.to(device), lengths)
+    loss = model.compute_loss(deltas_pred, deltas, non_pad_mask, o_j, y_j, cat_feats)
+    return loss
+
+
 def train(train_loader, val_loader, model, optimizer, train_cfg, global_cfg, device):
     train_metrics = defaultdict(list)
     val_metrics = defaultdict(list)
 
-    is_rnnsm = isinstance(model, RNNSM)
+    model2train_step = {RNNSM: rnnsm_train_step, RMTPP: rmtpp_train_step, \
+                        Grobformer: grobformer_train_step}
+    train_step = model2train_step[type(model)]
 
     best_metric = 1e10 if train_cfg.validate_by == 'rmse' else -1
 
@@ -51,14 +91,8 @@ def train(train_loader, val_loader, model, optimizer, train_cfg, global_cfg, dev
         losses = []
         model.train()
 
-        for timestamps, cat_feats, num_feats, non_pad_mask, return_mask, lengths in train_loader:
-            deltas = timestamps[:, 1:] - timestamps[:, :-1]
-            if is_rnnsm:
-                o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-                loss = model.compute_loss(deltas, non_pad_mask, return_mask, o_j)
-            else:
-                o_j, deltas_pred, y_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-                loss = model.compute_loss(deltas_pred, deltas, non_pad_mask, o_j, y_j, cat_feats)
+        for batch in train_loader:
+            loss = train_step(model, device, *batch)
 
             optimizer.zero_grad()
             loss.backward()
@@ -98,14 +132,18 @@ def main():
     cfg = compose(config_name="config.yaml")
 
     model = cfg.training.model
-    assert(model in ['rnnsm', 'rmtpp'])
+    assert model in ['rnnsm', 'rmtpp', 'grobformer'], 'Invalid model name'
+
     if model == 'rmtpp':
         assert(cfg.training.validate_by == 'rmse')
     else:
         assert(cfg.training.validate_by in ['rmse', 'recall', 'auc'])
 
-    model_class = RNNSM if model == 'rnnsm' else RMTPP
-    model_cfg = cfg.rnnsm if model == 'rnnsm' else cfg.rmtpp
+    model2class = {'rnnsm': RNNSM, 'rmtpp': RMTPP, 'grobformer': Grobformer}
+    model2cfg = {'rnnsm': cfg.rnnsm, 'rmtpp': cfg.rmtpp, 'grobformer': cfg.grobformer}
+
+    model_class = model2class[model]
+    model_cfg = model2cfg[model]
 
     train_loader, val_loader = get_ocon_train_val_loaders(
                                  cat_feat_name='event_type',

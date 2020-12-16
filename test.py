@@ -5,6 +5,7 @@ from data.OCON.dataset import get_ocon_test_loader
 from hydra.experimental import compose, initialize
 from RNNSM.rnnsm import RNNSM
 from RMTPP.rmtpp import RMTPP
+from grobformer.grobformer import Grobformer
 from torch import optim
 from collections import defaultdict
 import torch
@@ -46,17 +47,20 @@ def main():
     cfg = compose(config_name="config.yaml")
 
     model = cfg.testing.model
-    assert (model in ['rnnsm', 'rmtpp'])
+    assert model in ['rnnsm', 'rmtpp', 'grobformer'], 'Invalid model name'
 
-    model_class = RNNSM if model == 'rnnsm' else RMTPP
-    max_seq_len = cfg.rnnsm.max_seq_len if model == 'rnnsm' else \
-        cfg.rmtpp.max_seq_len
+    model2class = {'rnnsm': RNNSM, 'rmtpp': RMTPP, 'grobformer': Grobformer}
+    model2cfg = {'rnnsm': cfg.rnnsm, 'rmtpp': cfg.rmtpp, 'grobformer': cfg.grobformer}
+
+    model_class = model2class[model]
+    model_cfg = model2cfg[model]
+
     test_loader = get_ocon_test_loader(cat_feat_name='event_type',
                                        num_feat_name='time_delta',
                                        global_cfg=cfg.globals,
                                        path='data/OCON/train.csv',
                                        batch_size=cfg.training.batch_size,
-                                       max_seq_len=max_seq_len)
+                                       max_seq_len=model_cfg.max_seq_len)
 
     model = model_class(model_cfg, cfg.globals)
     model.load_state_dict(cfg.testing.model_path)

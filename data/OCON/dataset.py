@@ -20,9 +20,13 @@ class OconTrainDataset(Dataset):
         self._times = data['time'].to_numpy()
         self._events = (data[cat_feat_name] + 1).to_numpy()
         self._time_deltas = data[num_feat_name].to_numpy()
+
+        self.prediction_start = global_cfg.prediction_start
         self.prediction_end = global_cfg.prediction_end
         self.include_last_event = include_last_event
         self.padding_id = global_cfg.padding_id
+        self.dobavka = global_cfg.dobavka
+        self.drop_ratio = global_cfg.drop_ratio
 
         self.max_seq_len = max_seq_len
         self._generate_sequences()
@@ -38,16 +42,18 @@ class OconTrainDataset(Dataset):
             if cur_end < len(self._ids) and \
                     self._ids[cur_start] == self._ids[cur_end] and \
                     cur_end - cur_start < self.max_seq_len:
+                    #self._times[cur_end] < self.prediction_start:
                 cur_end += 1
                 continue
             else:
                 # if cur_end belongs to id of the next ATM:
                 if cur_end == len(self._ids) or \
                         self._ids[cur_start] != self._ids[cur_end]:
+                        #self._times[cur_end] > self.prediction_start:
                     returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1) + [False]))
                     if self.include_last_event:
                         ts = np.concatenate([self._times[cur_start:cur_end],
-                                             np.ones(1) * self.prediction_end])
+                                             np.ones(1) * (self.prediction_end + self.dobavka)])
                         timestamps.append(torch.FloatTensor(ts))
                         cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end]))
                         num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end]))
@@ -59,10 +65,18 @@ class OconTrainDataset(Dataset):
                         cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
                         num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end - 1]))
                 else:
+                    if np.random.rand() < self.drop_ratio:
+                        cur_start, cur_end = cur_end, cur_end + 1
+                        continue
                     returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1)))
                     timestamps.append(torch.FloatTensor(self._times[cur_start:cur_end]))
                     cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
                     num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end - 1]))
+
+                # if self._times[cur_end] > self.prediction_start:
+                #     while cur_end < len(self._ids) and \
+                #         self._ids[cur_end] == self._ids[cur_start]:
+                #         cur_end += 1
 
                 cur_start, cur_end = cur_end, cur_end + 1
 
