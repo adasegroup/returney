@@ -8,11 +8,8 @@ import os
 
 
 class OconTrainDataset(Dataset):
-    def get_indexes(path):
-        data = pd.read_csv(path)
-        return data['id'].values
-
-    def __init__(self, data,
+    def __init__(self,
+                 data,
                  cat_feat_name,
                  num_feat_name,
                  global_config,
@@ -62,8 +59,6 @@ class OconTrainDataset(Dataset):
                         cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
                         num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end - 1]))
                 else:
-                    cur_start, cur_end = cur_end, cur_end + 1
-                    continue
                     returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1)))
                     timestamps.append(torch.FloatTensor(self._times[cur_start:cur_end]))
                     cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
@@ -86,14 +81,14 @@ class OconTrainDataset(Dataset):
         return len(self.timestamps)
 
 
-def pad_collate_train(batch):
+def pad_collate_train(batch, padding_id):
     (timestamps, cat_feats, num_feats, return_mask) = zip(*batch)
     lens = np.array([len(seq) for seq in cat_feats])
     timestamps_padded = pad_sequence(timestamps, batch_first=True, padding_value=0)
     cat_feats_padded = pad_sequence(cat_feats, batch_first=True, padding_value=0)
     num_feats_padded = pad_sequence(num_feats, batch_first=True, padding_value=0)
     return_mask = pad_sequence(return_mask, batch_first=True, padding_value=0)
-    non_pad_mask = cat_feats_padded.ne(self.padding_id).squeeze()
+    non_pad_mask = cat_feats_padded.ne(padding_id).squeeze()
 
     return timestamps_padded, \
            cat_feats_padded, \
@@ -108,16 +103,16 @@ class OconTestDataset(Dataset):
                  data,
                  cat_feat_name,
                  num_feat_name,
-                 activity_start,
-                 prediction_start,
-                 prediction_end,
+                 global_config,
                  max_seq_len=500):
         super().__init__()
         self.max_seq_len = max_seq_len
-        self.prediction_start = prediction_start
-        self.prediction_end = prediction_end
-        has_event_in_activity = lambda x: ((x['time'] < prediction_start) &
-                                           (x['time'] > activity_start)).any()
+        self.prediction_start = global_config.prediction_start
+        self.prediction_end = global_config.prediction_end
+        self.activity_start = global_config.activity_start
+
+        has_event_in_activity = lambda x: ((x['time'] < self.prediction_start) &
+                                           (x['time'] > self.activity_start)).any()
         valid_ids = data.groupby('id').filter(has_event_in_activity).id.unique()
         self._ids = data['id'][np.isin(data['id'], valid_ids)].to_numpy()
         self._times = data['time'][np.isin(data['id'], valid_ids)].to_numpy()
@@ -217,12 +212,16 @@ def get_ocon_train_val_loaders(model,
     ids = data.id.unique()
     train_ids, val_ids = train_test_split(ids, train_size=train_ratio, random_state=seed)
     train, val = data[np.isin(data.id, train_ids)], data[np.isin(data.id, val_ids)]
-    train_ds = OconTrainDataset(train, global_config, cat_feat_name, num_feat_name, include_last_event=model == 'rnnsm',
+    train_ds = OconTrainDataset(train,
+                                cat_feat_name,
+                                num_feat_name,
+                                global_config,
+                                include_last_event=model == 'rnnsm',
                                 max_seq_len=max_seq_len)
     train_loader = DataLoader(dataset=train_ds,
                               batch_size=batch_size,
                               shuffle=True,
-                              collate_fn=pad_collate_train,
+                              collate_fn=lambda x: pad_collate_train(x, global_config.padding_id),
                               drop_last=True)
 
     val_ds = OconTestDataset(val, cat_feat_name, num_feat_name, global_config)

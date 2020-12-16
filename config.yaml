@@ -24,7 +24,7 @@ rnnsm:
   w_trainable: False
   prediction_start: ${globals.prediction_start}
   time_scale: 0.1
-  max_seq_len: 5
+  max_seq_len: 20
   dropout: 0.2
   integration_end: 1400
 training:
@@ -40,4 +40,4 @@ globals:
   activity_start: 1350
   prediction_start: 1385
   prediction_end: 1388
-  padding_id: 0 
+  padding_id: 0
