@@ -40,4 +40,4 @@ globals:
   activity_start: 1350
   prediction_start: 1385
   prediction_end: 1388
-  padding_id: 0
+  padding_id: 0 

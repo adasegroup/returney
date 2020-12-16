@@ -1,10 +1,7 @@
 import sys
-
 sys.path.append('../data')
 
 from data.OCON.dataset import get_ocon_test_loader
-import argparse
-import os
 from hydra.experimental import compose, initialize
 from RNNSM.rnnsm import RNNSM
 from RMTPP.rmtpp import RMTPP
@@ -12,30 +9,7 @@ from torch import optim
 from collections import defaultdict
 import torch
 import numpy as np
-
-from sklearn.metrics import roc_auc_score, recall_score
-
-activity_start = 16000
-prediction_start = 16400
-prediction_end = 16500
-
-
-def calc_rmse(predicted, target):
-    predicted = predicted[target != -1]
-    target = target[target != -1]
-    return np.sqrt(np.mean((predicted - target) ** 2))
-
-
-def calc_recall(predicted, target, prediction_end):
-    y_pred = predicted > prediction_end
-    y_true = target == -1
-    return recall_score(y_true, y_pred)
-
-
-def calc_auc(predicted, target, prediction_end):
-    y_pred = predicted > prediction_end
-    y_true = target == -1
-    return roc_auc_score(y_true, y_pred)
+from utils import calc_auc, calc_rmse, calc_recall
 
 
 def validate(val_loader, model, prediction_start, prediction_end, device):
