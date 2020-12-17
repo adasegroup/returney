@@ -27,7 +27,7 @@ class RNNSM(nn.Module):
             self.w = cfg.w
 
         self.time_scale = cfg.time_scale
-        self.prediction_start = cfg.prediction_start
+        self.prediction_start = global_cfg.prediction_start
         self.integration_end = cfg.integration_end
 
     def forward(self, cat_feats, num_feats, lengths):

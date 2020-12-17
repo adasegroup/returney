@@ -27,6 +27,7 @@ class OconTrainDataset(Dataset):
         self.padding = global_cfg.padding
         self.dobavka = global_cfg.dobavka
         self.drop_ratio = global_cfg.drop_ratio
+        self.train_in_prediction_window = global_cfg.train_in_prediction_window
 
         self.max_seq_len = max_seq_len
         self._generate_sequences()
@@ -41,15 +42,17 @@ class OconTrainDataset(Dataset):
         while cur_start < len(self._ids):
             if cur_end < len(self._ids) and \
                     self._ids[cur_start] == self._ids[cur_end] and \
-                    cur_end - cur_start < self.max_seq_len:
-                    #self._times[cur_end] < self.prediction_start:
+                    cur_end - cur_start < self.max_seq_len and \
+                    self._times[cur_end] < self.prediction_start if \
+                        not self.train_in_prediction_window else True:
                 cur_end += 1
                 continue
             else:
                 # if cur_end belongs to id of the next ATM:
                 if cur_end == len(self._ids) or \
-                        self._ids[cur_start] != self._ids[cur_end]:
-                        #self._times[cur_end] > self.prediction_start:
+                        self._ids[cur_start] != self._ids[cur_end] or \
+                        self._times[cur_end] > self.prediction_start \
+                            if not self.train_in_prediction_window else False:
                     returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1) + [False]))
                     if self.include_last_event:
                         ts = np.concatenate([self._times[cur_start:cur_end],
@@ -68,15 +71,19 @@ class OconTrainDataset(Dataset):
                     if np.random.rand() < self.drop_ratio:
                         cur_start, cur_end = cur_end, cur_end + 1
                         continue
+                    if cur_start == cur_end - 1:
+                        cur_start, cur_end = cur_end, cur_end + 1
+                        continue
                     returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1)))
                     timestamps.append(torch.FloatTensor(self._times[cur_start:cur_end]))
                     cat_feats.append(torch.LongTensor(self._events[cur_start:cur_end - 1]))
                     num_feats.append(torch.FloatTensor(self._time_deltas[cur_start:cur_end - 1]))
 
-                # if self._times[cur_end] > self.prediction_start:
-                #     while cur_end < len(self._ids) and \
-                #         self._ids[cur_end] == self._ids[cur_start]:
-                #         cur_end += 1
+                if not self.train_in_prediction_window:
+                    if self._times[cur_end] > self.prediction_start:
+                        while cur_end < len(self._ids) and \
+                                self._ids[cur_end] == self._ids[cur_start]:
+                            cur_end += 1
 
                 cur_start, cur_end = cur_end, cur_end + 1
 

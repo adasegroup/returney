@@ -47,7 +47,7 @@ training:
   n_epochs: 30
   batch_size: 100
   model_path: model.pth
-  model: rmtpp
+  model: rnnsm
   validate_by: rmse
 testing:
   model_path: model.pth
@@ -55,7 +55,8 @@ testing:
 globals:
   activity_start: 1380
   prediction_start: 1385
-  prediction_end: 1389
+  prediction_end: 1388.5
+  train_in_prediction_window: False
   dobavka: 20
   drop_ratio: 0.7
   padding: 0
