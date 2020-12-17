@@ -31,11 +31,12 @@ class Grobformer(RNNSM):
             self.w = cfg.w
 
         self.time_scale = cfg.time_scale
-        self.prediction_start = cfg.prediction_start
+        self.prediction_start = global_cfg.prediction_start
         self.integration_end = cfg.integration_end
 
     def forward(self, cat_feats, times, lengths):
-        times = times * self.time_scale
+        #times = times * self.time_scale
+        # if training
         if times.size(1) > cat_feats.size(1):
             times = times[:, :-1]
         non_pad_mask = pad_sequence(
