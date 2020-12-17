@@ -92,10 +92,14 @@ def train(train_loader, val_loader, model, optimizer, train_cfg, global_cfg, dev
             device)
 
         if train_cfg.validate_by == 'rmse' and rmse < best_metric:
+            print('here')
+            best_metric = rmse
             torch.save(model.state_dict(), train_cfg.model_path)
         elif train_cfg.validate_by == 'recall' and recall > best_metric:
+            best_metric = recall
             torch.save(model.state_dict(), train_cfg.model_path)
-        elif auc > best_metric:
+        elif train_cfg.validate_by == 'auc' and auc > best_metric:
+            best_metric = auc
             torch.save(model.state_dict(), train_cfg.model_path)
 
         val_metrics['rmse'].append(rmse)

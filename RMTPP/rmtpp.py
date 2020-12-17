@@ -91,8 +91,7 @@ class RMTPP(nn.Module):
                 ignore_index=0,
                 reduction='sum')
 
-        return (neg_ll + markers_loss) \
-            / torch.sum(non_pad_mask)
+        return (neg_ll + markers_loss) / torch.sum(non_pad_mask)
 
     def _s_t(self, last_o_j, deltas):
         out = torch.exp(torch.exp(last_o_j) / self.w - \

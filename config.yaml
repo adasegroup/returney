@@ -25,7 +25,6 @@ rnnsm:
   w_trainable: False
   max_seq_len: 30
   integration_end: 1400
-  prediction_start: ${globals.prediction_start}
   time_scale: 0.1
 grobformer:
   cat_size: 22
@@ -40,7 +39,6 @@ grobformer:
   w_trainable: False
   max_seq_len: 40
   integration_end: 1400
-  prediction_start: ${globals.prediction_start}
   time_scale: 0.1
 training:
   lr: 0.0005
