@@ -6,10 +6,10 @@ The problem is to develop a model that learns to predict users' return times fro
 
 
 ## Structure
-- `RMTPP` - folder with our implementation of vanilla Du et al. paper
-- `RNNSM` - folder with our implementation of vanilla Grob et al. paper
-- `semi-supervised` - folder with our experiments on semi-supervised approaches to the problem
-- `data` - folder with relevant datasets
+- `RMTPP` - folder with our implementation of Du et al. paper
+- `RNNSM` - folder with our implementation of Grob et al. paper
+- `grobformer` - folder with our implementation of RNNSM model based on hawkes transformer
+- `data` - folder with relevant datasets and helper function for their processing
 - `references` - folder with relevant existing implementations and their descriptions
 
 
@@ -21,3 +21,5 @@ Georg L. Grob, Ângelo Cardoso, C. H. Bryan Liu, Duncan A. Little, Benjamin Paul
 
 - [Recurrent Marked Temporal Point Processes:Embedding Event History to Vector](https://www.kdd.org/kdd2016/papers/files/rpp1081-duA.pdf)<br>
 Nan Du, Hanjun Dai, R. Trivedi, U. Upadhyay, M. Gomez-Rodriguez, Le Song, 2016
+
+- [Transformer Hawkes Process](https://arxiv.org/abs/2002.09291)<br>Simiao Zuo, Haoming Jiang, Zichong Li, Tuo Zhao, Hongyuan Zha
