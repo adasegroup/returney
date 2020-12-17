@@ -3,6 +3,7 @@ from torch import nn
 from scipy.integrate import trapz
 import numpy as np
 from grobformer.transformer import Transformer
+from torch.nn.utils.rnn import pad_sequence
 from RNNSM.rnnsm import RNNSM
 
 
@@ -18,9 +19,9 @@ class Grobformer(RNNSM):
         d_v = cfg.d_v
         dropout = cfg.dropout
 
-        num_types = cfg.cat_sizes[0]
-        self.transformer = Transformer(num_types, d_model, hidden_dim, n_layers,
-                                       n_head, d_k, d_v, dropout)
+        num_types = cfg.cat_size
+        self.transformer = Transformer(global_cfg, num_types, d_model, hidden_dim,
+                                       n_layers, n_head, d_k, d_v, dropout)
 
         self.output_dense = nn.Linear(d_model, 1, bias=False)
 
@@ -35,8 +36,10 @@ class Grobformer(RNNSM):
 
     def forward(self, cat_feats, times, lengths):
         times = times * self.time_scale
+        if times.size(1) > cat_feats.size(1):
+            times = times[:, :-1]
         non_pad_mask = pad_sequence(
             [torch.ones(l).ne(0) for l in lengths], batch_first=True).to(cat_feats.device)
-        hidden_states = self.transformer(cat_feats, times, non_pad_mask)
+        hidden_states = self.transformer(cat_feats.squeeze(), times.squeeze(), non_pad_mask)
         o_j = self.output_dense(hidden_states).squeeze()
         return o_j

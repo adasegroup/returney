@@ -72,7 +72,7 @@ def rmtpp_train_step(model, device, timestamps, cat_feats, num_feats, non_pad_ma
 def grobformer_train_step(model, device, timestamps, cat_feats, num_feats, non_pad_mask, return_mask, lengths):
     deltas = timestamps[:, 1:] - timestamps[:, :-1]
     o_j = model(cat_feats.to(device), timestamps.to(device), lengths)
-    loss = model.compute_loss(deltas_pred, deltas, non_pad_mask, o_j, y_j, cat_feats)
+    loss = model.compute_loss(deltas, non_pad_mask, return_mask, o_j)
     return loss
 
 

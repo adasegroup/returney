@@ -24,7 +24,7 @@ class OconTrainDataset(Dataset):
         self.prediction_start = global_cfg.prediction_start
         self.prediction_end = global_cfg.prediction_end
         self.include_last_event = include_last_event
-        self.padding_id = global_cfg.padding_id
+        self.padding = global_cfg.padding
         self.dobavka = global_cfg.dobavka
         self.drop_ratio = global_cfg.drop_ratio
 
@@ -95,14 +95,14 @@ class OconTrainDataset(Dataset):
         return len(self.timestamps)
 
 
-def pad_collate_train(batch, padding_id):
+def pad_collate_train(batch, padding):
     (timestamps, cat_feats, num_feats, return_mask) = zip(*batch)
     lens = np.array([len(seq) for seq in cat_feats])
     timestamps_padded = pad_sequence(timestamps, batch_first=True, padding_value=0)
     cat_feats_padded = pad_sequence(cat_feats, batch_first=True, padding_value=0)
     num_feats_padded = pad_sequence(num_feats, batch_first=True, padding_value=0)
     return_mask = pad_sequence(return_mask, batch_first=True, padding_value=0)
-    non_pad_mask = cat_feats_padded.ne(padding_id).squeeze()
+    non_pad_mask = cat_feats_padded.ne(padding).squeeze()
 
     return timestamps_padded, \
            cat_feats_padded, \
@@ -216,7 +216,7 @@ def get_ocon_train_val_loaders(model,
     else:
         filename = path
 
-    assert (model in ['rmtpp', 'rnnsm'])
+    assert (model in ['rmtpp', 'rnnsm', 'grobformer'])
 
     activity_start = global_cfg.activity_start
     prediction_start = global_cfg.prediction_start
@@ -230,15 +230,15 @@ def get_ocon_train_val_loaders(model,
                                 cat_feat_name,
                                 num_feat_name,
                                 global_cfg,
-                                include_last_event=model == 'rnnsm',
+                                include_last_event=model == 'rnnsm' or model == 'grobformer',
                                 max_seq_len=max_seq_len)
     train_loader = DataLoader(dataset=train_ds,
                               batch_size=batch_size,
                               shuffle=True,
-                              collate_fn=lambda x: pad_collate_train(x, global_cfg.padding_id),
+                              collate_fn=lambda x: pad_collate_train(x, global_cfg.padding),
                               drop_last=True)
 
-    val_ds = OconTestDataset(val, cat_feat_name, num_feat_name, global_cfg)
+    val_ds = OconTestDataset(val, cat_feat_name, num_feat_name, global_cfg, max_seq_len=max_seq_len)
     val_loader = DataLoader(dataset=val_ds,
                             batch_size=batch_size,
                             shuffle=False,

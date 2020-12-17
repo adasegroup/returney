@@ -8,12 +8,13 @@ from .transformer_utils import *
 
 class Transformer(nn.Module):
     def __init__(
-            self,
+            self, global_cfg,
             num_types, d_model=32,
             d_inner=64, n_layers=3, n_head=4, d_k=8, d_v=8, dropout=0.1):
         super().__init__()
 
         self.encoder = Encoder(
+            global_cfg,
             num_types=num_types, d_model=d_model,
             d_inner=d_inner, n_layers=n_layers, n_head=n_head, d_k=d_k, d_v=d_v,
             dropout=dropout)
@@ -23,11 +24,6 @@ class Transformer(nn.Module):
 
     def forward(self, event_type, event_time, non_pad_mask):
         enc_output = self.encoder(event_type, event_time, non_pad_mask)
-        enc_output = self.rnn(enc_output, non_pad_mask)
-
-        time_prediction = self.time_predictor(enc_output, non_pad_mask)
-
-        type_prediction = self.type_predictor(enc_output, non_pad_mask)
 
         return enc_output
 
@@ -36,7 +32,7 @@ class Encoder(nn.Module):
     """ A encoder model with self attention mechanism. """
 
     def __init__(
-            self,
+            self, global_cfg,
             num_types, d_model, d_inner,
             n_layers, n_head, d_k, d_v, dropout):
         super().__init__()
@@ -44,12 +40,13 @@ class Encoder(nn.Module):
         self.d_model = d_model
 
         # position vector, used for temporal encoding
-        self.position_vec = torch.tensor(
-            [math.pow(10000.0, 2.0 * (i // 2) / d_model) for i in range(d_model)],
-            device=torch.device('cuda'))
+        self.position_vec = nn.Parameter(torch.FloatTensor(
+            [math.pow(10000.0, 2.0 * (i // 2) / d_model) for i in range(d_model)]),
+            requires_grad=False)
 
         # event type embedding
-        self.event_emb = nn.Embedding(num_types + 1, d_model, padding_idx=Constants.PAD)
+        self.event_emb = nn.Embedding(num_types + 1, d_model, padding_idx=global_cfg.padding)
+        self.padding = global_cfg.padding
 
         self.layer_stack = nn.ModuleList([
             EncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
@@ -64,7 +61,7 @@ class Encoder(nn.Module):
         result = time.unsqueeze(-1) / self.position_vec
         result[:, :, 0::2] = torch.sin(result[:, :, 0::2])
         result[:, :, 1::2] = torch.cos(result[:, :, 1::2])
-        return result * non_pad_mask
+        return result * non_pad_mask.unsqueeze(-1)
 
     def forward(self, event_type, event_time, non_pad_mask):
         """ Encode event sequences via masked self-attention. """
@@ -72,7 +69,7 @@ class Encoder(nn.Module):
         # prepare attention masks
         # slf_attn_mask is where we cannot look, i.e., the future and the padding
         slf_attn_mask_subseq = get_subsequent_mask(event_type)
-        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=event_type, seq_q=event_type)
+        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=event_type, seq_q=event_type, padding=self.padding)
         slf_attn_mask_keypad = slf_attn_mask_keypad.type_as(slf_attn_mask_subseq)
         slf_attn_mask = (slf_attn_mask_keypad + slf_attn_mask_subseq).gt(0)
 
@@ -102,10 +99,10 @@ class EncoderLayer(nn.Module):
     def forward(self, enc_input, non_pad_mask=None, slf_attn_mask=None):
         enc_output, enc_slf_attn = self.slf_attn(
             enc_input, enc_input, enc_input, mask=slf_attn_mask)
-        enc_output *= non_pad_mask
+        enc_output *= non_pad_mask.unsqueeze(-1)
 
         enc_output = self.pos_ffn(enc_output)
-        enc_output *= non_pad_mask
+        enc_output *= non_pad_mask.unsqueeze(-1)
 
         return enc_output, enc_slf_attn
 
