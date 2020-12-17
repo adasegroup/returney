@@ -45,7 +45,7 @@ training:
   n_epochs: 30
   batch_size: 100
   model_path: model.pth
-  model: grobformer
+  model: rnnsm
   validate_by: rmse
 testing:
   model_path: model.pth
@@ -54,7 +54,7 @@ globals:
   activity_start: 1380
   prediction_start: 1385
   prediction_end: 1388.5
-  train_in_prediction_window: True
+  train_in_prediction_window: False
   dobavka: 20
   drop_ratio: 0.5
   padding: 0
