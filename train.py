@@ -92,7 +92,6 @@ def train(train_loader, val_loader, model, optimizer, train_cfg, global_cfg, dev
             device)
 
         if train_cfg.validate_by == 'rmse' and rmse < best_metric:
-            print('here')
             best_metric = rmse
             torch.save(model.state_dict(), train_cfg.model_path)
         elif train_cfg.validate_by == 'recall' and recall > best_metric:
@@ -108,7 +107,8 @@ def train(train_loader, val_loader, model, optimizer, train_cfg, global_cfg, dev
         print(f'Validation: '
               f'RMSE: {val_metrics["rmse"][-1]},\t'
               f'Recall: {val_metrics["recall"][-1]},\t'
-              f'AUC: {val_metrics["auc"][-1]} ')
+              f'AUC: {val_metrics["auc"][-1]}')
+    torch.save(model.state_dict(), train_cfg.model_path)
 
 
 def main():
@@ -123,7 +123,7 @@ def main():
     if model == 'rmtpp':
         assert(cfg.training.validate_by == 'rmse')
     else:
-        assert(cfg.training.validate_by in ['rmse', 'recall', 'auc'])
+        assert(cfg.training.validate_by in ['rmse', 'recall', 'auc', 'none'])
 
     model2class = {'rnnsm': RNNSM, 'rmtpp': RMTPP, 'grobformer': Grobformer}
     model2cfg = {'rnnsm': cfg.rnnsm, 'rmtpp': cfg.rmtpp, 'grobformer': cfg.grobformer}

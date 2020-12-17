@@ -36,7 +36,7 @@ model = rmtpp / rnnsm / groobformer
 and the metric which the best model is chosen by
 (if `None` the model is saved)
 ```
-validate_by = rmse / recall / auc / None
+validate_by = rmse / recall / auc / none
 ```
 3. The model can be tested using `test.py` script:
 ``` bash

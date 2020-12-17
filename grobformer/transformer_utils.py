@@ -1,5 +1,6 @@
 import torch
 
+
 def get_attn_key_pad_mask(seq_k, seq_q, padding=0):
     """ For masking out the padding part of key sequence. """
 

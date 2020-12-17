@@ -1,10 +1,9 @@
-import pandas as pd
 import numpy as np
-from torch.utils.data import Dataset, DataLoader
-from torch.nn.utils.rnn import pad_sequence
-from sklearn.model_selection import train_test_split
+import pandas as pd
 import torch
-import os
+from sklearn.model_selection import train_test_split
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import Dataset, DataLoader
 
 
 class OconTrainDataset(Dataset):
@@ -41,18 +40,18 @@ class OconTrainDataset(Dataset):
 
         while cur_start < len(self._ids):
             if cur_end < len(self._ids) and \
-                    self._ids[cur_start] == self._ids[cur_end] and \
-                    cur_end - cur_start < self.max_seq_len and \
-                    self._times[cur_end] < self.prediction_start if \
-                        not self.train_in_prediction_window else True:
+               self._ids[cur_start] == self._ids[cur_end] and \
+               cur_end - cur_start < self.max_seq_len and \
+               self._times[cur_end] < self.prediction_start if \
+                    not self.train_in_prediction_window else True:
                 cur_end += 1
                 continue
             else:
                 # if cur_end belongs to id of the next ATM:
                 if cur_end == len(self._ids) or \
-                        self._ids[cur_start] != self._ids[cur_end] or \
-                        self._times[cur_end] > self.prediction_start \
-                            if not self.train_in_prediction_window else False:
+                   self._ids[cur_start] != self._ids[cur_end] or \
+                   self._times[cur_end] > self.prediction_start \
+                        if not self.train_in_prediction_window else False:
                     returned.append(torch.BoolTensor([True] * (cur_end - cur_start - 1) + [False]))
                     if self.include_last_event:
                         ts = np.concatenate([self._times[cur_start:cur_end],
@@ -262,18 +261,12 @@ def get_ocon_test_loader(cat_feat_name,
                          batch_size=32,
                          max_seq_len=500):
     if path is None:
-        filename = 'data/OCON/train.csv'
+        filename = 'data/OCON/test.csv'
     else:
         filename = path
 
-    activity_start = global_cfg.activity_start
-    prediction_start = global_cfg.prediction_start
-    prediction_end = global_cfg.prediction_end
-
-    csv = pd.read_csv(filename)
-
-    test_ds = OconTestDataset(ids, cat_feat_name, num_feat_name, global_cfg,
-                              prediction_end)
+    test = pd.read_csv(filename)
+    test_ds = OconTestDataset(test, cat_feat_name, num_feat_name, global_cfg, max_seq_len=max_seq_len)
     test_loader = DataLoader(dataset=test_ds,
                              batch_size=batch_size,
                              shuffle=False,

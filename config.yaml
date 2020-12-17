@@ -46,10 +46,10 @@ training:
   batch_size: 100
   model_path: model.pth
   model: rnnsm
-  validate_by: rmse
+  validate_by: none
 testing:
   model_path: model.pth
-  model: grobformer
+  model: rnnsm
 globals:
   activity_start: 1380
   prediction_start: 1385

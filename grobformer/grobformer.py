@@ -1,10 +1,9 @@
 import torch
 from torch import nn
-from scipy.integrate import trapz
-import numpy as np
-from grobformer.transformer import Transformer
 from torch.nn.utils.rnn import pad_sequence
+
 from RNNSM.rnnsm import RNNSM
+from grobformer.transformer import Transformer
 
 
 class Grobformer(RNNSM):
@@ -35,7 +34,7 @@ class Grobformer(RNNSM):
         self.integration_end = cfg.integration_end
 
     def forward(self, cat_feats, times, lengths):
-        #times = times * self.time_scale
+        # times = times * self.time_scale
         # if training
         if times.size(1) > cat_feats.size(1):
             times = times[:, :-1]

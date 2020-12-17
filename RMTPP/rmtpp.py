@@ -1,9 +1,9 @@
 import numpy as np
 import torch
-from torch import nn
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
 from scipy.integrate import trapz
+from torch import nn
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
 class RMTPP(nn.Module):
@@ -17,8 +17,9 @@ class RMTPP(nn.Module):
 
         cat_sizes = cfg.cat_sizes
         emb_dims = cfg.emb_dims
-        self.embeddings = nn.ModuleList([nn.Embedding(cat_size + 1, emb_dim, padding_idx=global_cfg.padding) for cat_size, emb_dim
-                                         in zip(cat_sizes, emb_dims)])
+        self.embeddings = nn.ModuleList(
+            [nn.Embedding(cat_size + 1, emb_dim, padding_idx=global_cfg.padding) for cat_size, emb_dim
+             in zip(cat_sizes, emb_dims)])
 
         self.hidden = nn.Linear(cfg.rnn_hidden_size, cfg.hidden_size)
         self.marker_outs = nn.ModuleList([nn.Linear(cfg.hidden_size, cat_size + 1) for cat_size in cat_sizes])
@@ -67,13 +68,13 @@ class RMTPP(nn.Module):
             for i in range(batch_size):
                 ith_t_s, ith_s_t_s = t_til_start[i], s_t_s[i]
                 deltas = torch.arange(0,
-                    (self.integration_end - last_t_j[i]) * self.time_scale,
-                    self.time_scale).to(o_j.device)
+                                      (self.integration_end - last_t_j[i]) * self.time_scale,
+                                      self.time_scale).to(o_j.device)
                 ith_s_deltas = self._s_t(last_o_j[i], deltas[None, :])
                 pred_delta = trapz(ith_s_deltas[deltas < ith_t_s].cpu(),
-                    deltas[deltas < ith_t_s].cpu())
+                                   deltas[deltas < ith_t_s].cpu())
                 pred_delta += trapz(ith_s_deltas[deltas >= ith_t_s].cpu(),
-                    deltas[deltas >= ith_t_s].cpu()) / ith_s_t_s.item()
+                                    deltas[deltas >= ith_t_s].cpu()) / ith_s_t_s.item()
                 preds[i] = last_t_j[i].cpu().numpy() + pred_delta / self.time_scale
         return preds
 
@@ -87,13 +88,13 @@ class RMTPP(nn.Module):
             y_true = ys_true[:, :, i]
             n_classes = y_j.size(-1)
             markers_loss += w * F.cross_entropy(y_j.view(-1, n_classes),
-                y_true.view(-1),
-                ignore_index=0,
-                reduction='sum')
+                                                y_true.view(-1),
+                                                ignore_index=0,
+                                                reduction='sum')
 
         return (neg_ll + markers_loss) / torch.sum(non_pad_mask)
 
     def _s_t(self, last_o_j, deltas):
         out = torch.exp(torch.exp(last_o_j) / self.w - \
-            torch.exp(last_o_j + self.w * deltas) / self.w)
+                        torch.exp(last_o_j + self.w * deltas) / self.w)
         return out.squeeze()

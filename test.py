@@ -1,4 +1,5 @@
 import sys
+
 sys.path.append('../data')
 
 from data.OCON.dataset import get_ocon_test_loader
@@ -6,24 +7,21 @@ from hydra.experimental import compose, initialize
 from RNNSM.rnnsm import RNNSM
 from RMTPP.rmtpp import RMTPP
 from grobformer.grobformer import Grobformer
-from torch import optim
-from collections import defaultdict
 import torch
-import numpy as np
 from utils import *
 
 
-def test(val_loader, model, prediction_start, prediction_end, device):
+def test(val_loader, model, global_cfg, device):
     all_preds = []
     all_targets = []
 
     model2test_step = {RNNSM: rnnsm_test_step, RMTPP: rmtpp_test_step, \
-                        Grobformer: grobformer_test_step}
+                       Grobformer: grobformer_test_step}
     test_step = model2test_step[type(model)]
 
     model.eval()
     with torch.no_grad():
-        for timestamps, cat_feats, num_feats, targets, lengths in val_loader:
+        for batch in val_loader:
             preds = test_step(model, device, *batch)
             targets = batch[-2]
             targets = targets.numpy()
@@ -33,9 +31,10 @@ def test(val_loader, model, prediction_start, prediction_end, device):
 
     all_preds = np.array(all_preds)
     all_targets = np.array(all_targets)
-    return calc_rmse(all_preds, all_targets), \
-           calc_recall(all_preds, all_targets, prediction_end), \
-           calc_auc(all_preds, all_targets, prediction_end)
+    print(f'Testing: '
+          f'RMSE: {calc_rmse(all_preds, all_targets)},\t'
+          f'Recall: {calc_recall(all_preds, all_targets, global_cfg.prediction_end)},\t'
+          f'AUC: {calc_auc(all_preds, all_targets, global_cfg.prediction_end)}')
 
 
 def main():
@@ -56,13 +55,13 @@ def main():
     test_loader = get_ocon_test_loader(cat_feat_name='event_type',
                                        num_feat_name='time_delta',
                                        global_cfg=cfg.globals,
-                                       path='data/OCON/train.csv',
+                                       path='data/OCON/test.csv',
                                        batch_size=cfg.training.batch_size,
                                        max_seq_len=model_cfg.max_seq_len)
 
     model = model_class(model_cfg, cfg.globals)
-    model.load_state_dict(cfg.testing.model_path)
-    test(test_loader, model, prediction_start, prediction_end, device)
+    model.load_state_dict(torch.load(cfg.testing.model_path))
+    test(test_loader, model, cfg.globals, device)
 
 
 if __name__ == '__main__':

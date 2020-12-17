@@ -1,5 +1,4 @@
 import math
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -183,6 +182,7 @@ class Predictor(nn.Module):
 
 class ScaledDotProductAttention(nn.Module):
     """ Scaled Dot-Product Attention """
+
     def __init__(self, temperature, attn_dropout=0.2):
         super().__init__()
 

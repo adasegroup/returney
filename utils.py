@@ -1,5 +1,5 @@
-from sklearn.metrics import roc_auc_score, recall_score
 import numpy as np
+from sklearn.metrics import roc_auc_score, recall_score
 
 
 def calc_rmse(predicted, target):
