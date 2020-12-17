@@ -10,25 +10,7 @@ from torch import optim
 from collections import defaultdict
 import torch
 import numpy as np
-from utils import calc_rmse, calc_auc, calc_recall
-
-
-def rnnsm_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
-    o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-    preds = model.predict(o_j, timestamps, lengths)
-    return preds
-
-
-def rmtpp_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
-    o_j, deltas_pred, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
-    preds = model.predict(deltas_pred, timestamps, lengths)
-    return preds
-
-
-def grobformer_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
-    o_j = model(cat_feats.to(device), timestamps.to(device), lengths)
-    preds = model.predict(o_j, timestamps, lengths)
-    return preds
+from utils import *
 
 
 def validate(val_loader, model, prediction_start, prediction_end, device):
@@ -64,8 +46,8 @@ def rnnsm_train_step(model, device, timestamps, cat_feats, num_feats, non_pad_ma
 
 def rmtpp_train_step(model, device, timestamps, cat_feats, num_feats, non_pad_mask, return_mask, lengths):
     deltas = timestamps[:, 1:] - timestamps[:, :-1]
-    o_j, deltas_pred, y_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-    loss = model.compute_loss(deltas_pred, deltas, non_pad_mask, o_j, y_j, cat_feats)
+    o_j, y_j = model(cat_feats.to(device), num_feats.to(device), lengths)
+    loss = model.compute_loss(deltas, non_pad_mask, o_j, y_j, cat_feats)
     return loss
 
 

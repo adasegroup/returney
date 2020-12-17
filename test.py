@@ -10,25 +10,7 @@ from torch import optim
 from collections import defaultdict
 import torch
 import numpy as np
-from utils import calc_auc, calc_rmse, calc_recall
-
-
-def rnnsm_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
-    o_j = model(cat_feats.to(device), num_feats.to(device), lengths)
-    preds = model.predict(o_j, timestamps, lengths)
-    return preds
-
-
-def rmtpp_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
-    o_j, deltas_pred, _ = model(cat_feats.to(device), num_feats.to(device), lengths)
-    preds = model.predict(deltas_pred, timestamps, lengths)
-    return preds
-
-
-def grobformer_test_step(model, device, timestamps, cat_feats, num_feats, targets, lengths):
-    o_j = model(cat_feats.to(device), timestamps.to(device), lengths)
-    preds = model.predict(o_j, timestamps, lengths)
-    return preds
+from utils import *
 
 
 def test(val_loader, model, prediction_start, prediction_end, device):
